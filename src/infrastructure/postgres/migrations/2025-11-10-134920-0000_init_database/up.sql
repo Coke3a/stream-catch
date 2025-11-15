@@ -148,13 +148,15 @@ CREATE TABLE deliveries (
 
 CREATE TABLE jobs (
   id BIGSERIAL PRIMARY KEY,
-  type TEXT NOT NULL CHECK (type IN ('RebuildDLRList','RecordingPostProcess','NotifyReady')),
+  type TEXT NOT NULL CHECK (type IN ('RecordingUpload','NotifyReady')),
   payload JSONB NOT NULL,
-  run_at timestamptz NOT NULL DEFAULT now(),
+  run_at timestamptz,
   attempts INT NOT NULL DEFAULT 0,
   locked_at timestamptz,
   locked_by TEXT,
   status TEXT NOT NULL CHECK (status IN ('queued','running','done','failed','dead')) DEFAULT 'queued'
+  error TEXT,
+  created_at timestamptz NOT NULL DEFAULT (now())
 );
 
 -- ================
