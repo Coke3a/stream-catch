@@ -1,5 +1,6 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use serde_json::Value;
 
 use crate::infrastructure::postgres::schema::jobs;
 
@@ -7,14 +8,14 @@ use crate::infrastructure::postgres::schema::jobs;
 #[diesel(table_name = jobs)]
 pub struct JobEntity {
     pub id: i64,
-    pub type: String,
-    pub payload: String,
-    pub run_at: NaiveDateTime,
+    pub type_: String,
+    pub payload: Value,
+    pub run_at: DateTime<Utc>,
     pub attempts: i32,
-    pub locked_at: NaiveDateTime,
-    pub locked_by: String,
+    pub locked_at: Option<DateTime<Utc>>,
+    pub locked_by: Option<String>,
     pub status: String,
-    pub error: String,
-    pub created_at: NaiveDateTime,
+    pub error: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 

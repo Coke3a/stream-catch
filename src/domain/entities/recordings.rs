@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 
 use crate::infrastructure::postgres::schema::recordings;
@@ -8,41 +8,44 @@ use crate::infrastructure::postgres::schema::recordings;
 pub struct RecordingEntity {
     pub id: i64,
     pub live_account_id: i64,
-    pub started_at: Option<NaiveDateTime>,
-    pub ended_at: Option<NaiveDateTime>,
+    pub recording_key: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
     pub duration_sec: Option<i32>,
     pub size_bytes: Option<i64>,
     pub storage_prefix: Option<String>,
     pub status: String,
-    pub poster_key: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub poster_storage_path: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Insertable, Queryable)]
 #[diesel(table_name = recordings)]
 pub struct InsertRecordingEntity {
     pub live_account_id: i64,
-    pub started_at: Option<NaiveDateTime>,
-    pub ended_at: Option<NaiveDateTime>,
+    pub recording_key: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
     pub duration_sec: Option<i32>,
     pub size_bytes: Option<i64>,
     pub storage_prefix: Option<String>,
     pub status: String,
-    pub poster_key: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub poster_storage_path: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, AsChangeset, Queryable)]
 #[diesel(table_name = recordings)]
 pub struct UpdateRecordingEntity {
-    pub started_at: Option<NaiveDateTime>,
-    pub ended_at: Option<NaiveDateTime>,
+    pub recording_key: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
     pub duration_sec: Option<i32>,
     pub size_bytes: Option<i64>,
     pub storage_prefix: Option<String>,
     pub status: String,
-    pub poster_key: Option<String>,
-    pub updated_at: NaiveDateTime,
+    pub poster_storage_path: Option<String>,
+    pub updated_at: DateTime<Utc>,
 }
