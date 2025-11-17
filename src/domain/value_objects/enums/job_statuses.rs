@@ -14,11 +14,11 @@ pub enum JobStatus {
 impl Display for JobStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let job_type = match self {
-            JobStatus::Queued => "Queued",
-            JobStatus::Running => "Running",
-            JobStatus::Done => "Done",
-            JobStatus::Failed => "Failed",
-            JobStatus::Dead => "Dead",
+            JobStatus::Queued => "queued",
+            JobStatus::Running => "running",
+            JobStatus::Done => "done",
+            JobStatus::Failed => "failed",
+            JobStatus::Dead => "dead",
         };
         write!(f, "{}", job_type)
     }

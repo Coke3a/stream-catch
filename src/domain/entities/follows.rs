@@ -1,5 +1,6 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use uuid::Uuid;
 
 use crate::infrastructure::postgres::schema::follows;
 
@@ -7,27 +8,27 @@ use crate::infrastructure::postgres::schema::follows;
 #[diesel(primary_key(user_id, live_account_id))]
 #[diesel(table_name = follows)]
 pub struct FollowEntity {
-    pub user_id: i64,
+    pub user_id: Uuid,
     pub live_account_id: i64,
     pub status: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 
 #[derive(Debug, Clone, Insertable, Queryable)]
 #[diesel(table_name = follows)]
 pub struct InsertFollowEntity {
-    pub user_id: i64,
+    pub user_id: Uuid,
     pub live_account_id: i64,
     pub status: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, AsChangeset, Queryable)]
 #[diesel(table_name = follows)]
 pub struct EditFollowEntity {
     pub status: String,
-    pub updated_at: NaiveDateTime,
+    pub updated_at: DateTime<Utc>,
 }

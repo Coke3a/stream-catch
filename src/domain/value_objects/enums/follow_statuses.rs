@@ -12,9 +12,9 @@ pub enum FollowStatus {
 impl Display for FollowStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let follow_status = match self {
-            FollowStatus::Active => "Active",
-            FollowStatus::Inactive => "Inactive",
-            FollowStatus::TemporaryInactive => "TemporaryInactive",
+            FollowStatus::Active => "active",
+            FollowStatus::Inactive => "inactive",
+            FollowStatus::TemporaryInactive => "temporary_inactive",
         };
         write!(f, "{}", follow_status)
     }

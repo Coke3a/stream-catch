@@ -1,68 +1,62 @@
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::domain::{entities::{password_reset_tokens::{CreatePasswordResetTokenEntity, UpdateToUsedPasswordResetTokenEntity}, users::RegisterUserEntity}, value_objects::user_statuses::UserStatus};
+use uuid::Uuid;
+
+use crate::domain::{
+    entities::app_users::{AppUserEntity, InsertAppUserEntity, UpdateAppUserEntity},
+    value_objects::enums::user_statuses::UserStatus,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct UserModel {
-    pub id: i64,
-    pub email: String,
-    pub username: String,
-    pub telegram_id: Option<i64>,
+pub struct AppUserModel {
+    pub id: Uuid,
+    pub display_name: Option<String>,
     pub status: UserStatus,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<AppUserEntity> for AppUserModel {
+    fn from(entity: AppUserEntity) -> Self {
+        Self {
+            id: entity.id,
+            display_name: entity.display_name,
+            status: match entity.status.as_str() {
+                "blocked" => UserStatus::Blocked,
+                "inactive" => UserStatus::Inactive,
+                _ => UserStatus::Active,
+            },
+            created_at: entity.created_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterUserModel {
-    pub email: String,
-    pub username: String,
-    pub password_hash: String,
+pub struct InsertAppUserModel {
+    pub id: Uuid,
+    pub display_name: Option<String>,
 }
 
-impl RegisterUserModel {
-    pub fn to_entity(&self) -> RegisterUserEntity {
-        RegisterUserEntity {
-            email: self.email.clone(),
-            username: self.username.clone(),
-            password_hash: self.password_hash.clone(),
+impl InsertAppUserModel {
+    pub fn to_entity(&self) -> InsertAppUserEntity {
+        InsertAppUserEntity {
+            id: self.id,
+            display_name: self.display_name.clone(),
             status: UserStatus::Active.to_string(),
-            created_at: Utc::now().naive_utc(),
-            updated_at: Utc::now().naive_utc(),
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreatePasswordResetTokenModel {
-    user_id: i64,
-    token_hash: String,
-    expires_at: NaiveDateTime,
-    used_at: Option<NaiveDateTime>,
+pub struct UpdateAppUserModel {
+    pub display_name: Option<String>,
+    pub status: Option<UserStatus>,
 }
 
-impl CreatePasswordResetTokenModel {
-    pub fn to_entity(&self) -> CreatePasswordResetTokenEntity {
-        CreatePasswordResetTokenEntity {
-            user_id: self.user_id,
-            token_hash: self.token_hash.clone(),
-            expires_at: self.expires_at,
-            used_at: self.used_at,
-            created_at: Utc::now().naive_utc(),
-        }
-    }
-}
-
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateToUsedPasswordResetTokenModel {
-    used_at: Option<NaiveDateTime>,
-}
-
-impl UpdateToUsedPasswordResetTokenModel {
-    pub fn to_entity(&self) -> UpdateToUsedPasswordResetTokenEntity {
-        UpdateToUsedPasswordResetTokenEntity {
-            used_at: self.used_at,
+impl UpdateAppUserModel {
+    pub fn to_entity(&self) -> UpdateAppUserEntity {
+        UpdateAppUserEntity {
+            display_name: self.display_name.clone(),
+            status: self.status.as_ref().map(|status| status.to_string()),
         }
     }
 }

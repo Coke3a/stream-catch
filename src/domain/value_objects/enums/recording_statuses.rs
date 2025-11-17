@@ -4,8 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RecordingStatus {
     #[default]
-    Recording,
-    Uploading,
+    Processing,
     Ready,
     Failed,
 }
@@ -13,10 +12,9 @@ pub enum RecordingStatus {
 impl Display for RecordingStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let follow_status = match self {
-            RecordingStatus::Recording => "Recording",
-            RecordingStatus::Uploading => "Uploading",
-            RecordingStatus::Ready => "Ready",
-            RecordingStatus::Failed => "Error",
+            RecordingStatus::Processing => "processing",
+            RecordingStatus::Ready => "ready",
+            RecordingStatus::Failed => "failed",
         };
         write!(f, "{}", follow_status)
     }
