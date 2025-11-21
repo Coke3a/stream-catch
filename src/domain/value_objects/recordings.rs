@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{
     entities::recordings::{InsertRecordingEntity, UpdateRecordingEntity},
-    value_objects::enums::recording_statuses::RecordingStatus,
+    value_objects::enums::{
+        platforms::Platform, recording_statuses::RecordingStatus, sort_order::SortOrder,
+    },
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -82,4 +84,13 @@ impl UpdateRecordingModel {
             updated_at: Utc::now(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ListRecordingsFilter {
+    pub live_account_id: Option<String>,
+    pub platform: Option<Platform>,
+    pub status: Option<RecordingStatus>,
+    pub limit: Option<i64>,
+    pub sort_order: SortOrder,
 }

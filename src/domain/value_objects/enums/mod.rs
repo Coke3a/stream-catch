@@ -4,4 +4,5 @@ pub mod job_types;
 pub mod live_account_statuses;
 pub mod platforms;
 pub mod recording_statuses;
+pub mod sort_order;
 pub mod user_statuses;

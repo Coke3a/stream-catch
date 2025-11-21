@@ -81,3 +81,9 @@ impl InsertLiveAccountModel {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FindLiveAccountModel {
+    pub platform: Platform,
+    pub account_id: String,
+}
