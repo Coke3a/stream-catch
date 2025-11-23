@@ -9,5 +9,5 @@ use crate::domain::value_objects::recordings::ListRecordingsFilter;
 #[async_trait]
 #[automock]
 pub trait RecordingDashboardRepository {
-    async fn list_recording(&self, user_id: Uuid, filter: ListRecordingsFilter) -> Result<Vec<RecordingEntity>>;
+    async fn list_recording(&self, user_id: Uuid, filter: &ListRecordingsFilter) -> Result<Vec<RecordingEntity>>;
 }

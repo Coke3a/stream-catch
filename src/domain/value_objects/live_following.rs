@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::domain::{
-    entities::{follows::{EditFollowEntity, InsertFollowEntity}, live_accounts::InsertLiveAccountEntity},
-    value_objects::enums::{follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus, platforms::Platform},
+    entities::{follows::{EditFollowEntity}},
+    value_objects::enums::{follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus, platforms::Platform, sort_order::SortOrder},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,35 +18,15 @@ pub struct FollowModel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InsertFollowModel {
-    pub user_id: Uuid,
-    pub live_account_id: i64,
-}
-
-impl InsertFollowModel {
-    pub fn to_entity(&self) -> InsertFollowEntity {
-        InsertFollowEntity {
-            user_id: self.user_id,
-            live_account_id: self.live_account_id,
-            status: FollowStatus::Active.to_string(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-    
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateStatusFollowModel {
     pub status: FollowStatus,
-    pub updated_at: DateTime<Utc>,
 }
 
 impl UpdateStatusFollowModel {
     pub fn to_entity(&self) -> EditFollowEntity {
         EditFollowEntity {
             status: self.status.to_string(),
-            updated_at: self.updated_at,
+            updated_at: Utc::now(),
         }
     }
 }
@@ -63,27 +43,21 @@ pub struct LiveAccountModel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct InsertLiveAccountModel {
-    pub platform: Platform,
-    pub account_id: String,
-    pub canonical_url: String,
-}
-
-impl InsertLiveAccountModel {
-    pub fn to_entity(&self) -> InsertLiveAccountEntity {
-        InsertLiveAccountEntity {
-            platform: self.platform.to_string(),
-            account_id: self.account_id.clone(),
-            canonical_url: self.canonical_url.clone(),
-            status: LiveAccountStatus::Active.to_string(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FindLiveAccountModel {
     pub platform: Platform,
     pub account_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ListFollowsFilter {
+    pub live_account_id: Option<String>,
+    pub platform: Option<Platform>,
+    pub status: Option<FollowStatus>,
+    pub limit: Option<i64>,
+    pub sort_order: SortOrder,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InsertFollowLiveAccountModel {
+    pub url: String,
 }

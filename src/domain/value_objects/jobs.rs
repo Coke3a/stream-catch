@@ -21,32 +21,6 @@ pub struct JobModel {
     pub created_at: DateTime<Utc>,
 }
 
-impl From<JobEntity> for JobModel {
-    fn from(entity: JobEntity) -> Self {
-        JobModel {
-            id: entity.id,
-            type_: match entity.type_.as_str() {
-                "NotifyReady" => JobType::NotifyReady,
-                _ => JobType::RecordingUpload,
-            },
-            payload: entity.payload,
-            run_at: entity.run_at,
-            attempts: entity.attempts,
-            locked_at: entity.locked_at,
-            locked_by: entity.locked_by,
-            status: match entity.status.as_str() {
-                "running" => JobStatus::Running,
-                "done" => JobStatus::Done,
-                "failed" => JobStatus::Failed,
-                "dead" => JobStatus::Dead,
-                _ => JobStatus::Queued,
-            },
-            error: entity.error,
-            created_at: entity.created_at,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InsertJobModel {
     pub type_: JobType,
