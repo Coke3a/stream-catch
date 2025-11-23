@@ -13,27 +13,6 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     Router::new()
 }
 
-
-// TODO: Fix later
-
-pub async fn webhook_recording_start<T>(
-    State(recording_job_usecase): State<Arc<RecordingJobUseCase<T>>>,
-) -> impl IntoResponse
-where
-    T: RecordingJobRepository + Send + Sync,
-{
-    
-}
-
-pub async fn webhook_recording_end<T>(
-    State(recording_job_usecase): State<Arc<RecordingJobUseCase<T>>>,
-) -> impl IntoResponse
-where
-    T: RecordingJobRepository + Send + Sync,
-{
-    
-}
-
 pub async fn upload_recording_job_start<T>(
     State(recording_job_usecase): State<Arc<RecordingJobUseCase<T>>>,
 ) -> impl IntoResponse

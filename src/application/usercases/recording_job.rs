@@ -24,13 +24,6 @@ impl<T> RecordingJobUseCase<T>
 where
     T: RecordingJobRepository,
 {
-    pub async fn webhook_recording_start(&self, insert_recording_model: InsertRecordingModel) -> Result<()> {
-        unimplemented!()
-    }
-    
-    pub async fn webhook_recording_end(&self, update_recording_model: UpdateRecordingModel) -> Result<()> {
-        unimplemented!()
-    }
     
     pub async fn upload_recording_job_start(&self, insert_job_model: InsertJobModel) -> Result<()> {
         unimplemented!()
