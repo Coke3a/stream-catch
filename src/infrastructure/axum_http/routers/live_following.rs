@@ -20,7 +20,14 @@ pub async fn follow<T>(
 where
     T: LiveFollowingRepository + Send + Sync,
 {
-
+	// convert base64 url to url
+	// Detect which streaming platform this URL corresponds to
+	// send to recording engine to check is url is exising
+	// if exising
+	// -	add follow
+	// -	response ok
+	// if not exising
+	// -	response not found 
 }
 
 pub async fn unfollow<T>(
@@ -31,16 +38,19 @@ pub async fn unfollow<T>(
 where
     T: LiveFollowingRepository + Send + Sync,
 {
-
+	// find follow by user_id and follow_id
+	// If the update time is less than 1 day
+	// -	return a failed response
+	// else set follow status to Inactive
 }
 
 pub async fn list_follows<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
     Extension(user_id): Extension<Uuid>,
-    Json(url): Json<InsertFollowLiveAccountModel>,
 ) -> impl IntoResponse
 where
     T: LiveFollowingRepository + Send + Sync,
 {
-
+	// get (join recording with follow) by user_id
+	// response
 }
