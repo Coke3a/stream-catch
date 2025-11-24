@@ -12,6 +12,9 @@
 -- 0. Extensions
 -- =========================
 
+-- UUID generation for primary keys
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- Case‑insensitive text (not used directly yet, but handy for future email/ID columns)
 CREATE EXTENSION IF NOT EXISTS citext;
 
@@ -39,7 +42,7 @@ CREATE TABLE "app_users" (
 -- =========================
 
 CREATE TABLE "plans" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "name" TEXT,
   "price_minor" INT NOT NULL CHECK ("price_minor" >= 0),
   "duration_days" INT NOT NULL CHECK ("duration_days" > 0),
@@ -48,13 +51,13 @@ CREATE TABLE "plans" (
 );
 
 CREATE TABLE "subscriptions" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "user_id" uuid NOT NULL,
-  "plan_id" BIGINT NOT NULL,
+  "plan_id" uuid NOT NULL,
   "starts_at" timestamptz NOT NULL,
   "ends_at" timestamptz NOT NULL,
   "billing_mode" TEXT NOT NULL CHECK ("billing_mode" IN ('recurring','manual')) DEFAULT 'recurring',
-  "default_payment_method_id" BIGINT,
+  "default_payment_method_id" uuid,
   "cancel_at_period_end" BOOLEAN NOT NULL DEFAULT false,
   "canceled_at" timestamptz,
   "status" TEXT NOT NULL CHECK ("status" IN ('active','past_due','canceled','expired')),
@@ -68,7 +71,7 @@ CREATE TABLE "subscriptions" (
 -- =========================
 
 CREATE TABLE "payment_provider_customers" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "user_id" uuid NOT NULL,
   "provider" TEXT NOT NULL,
   "customer_ref" TEXT NOT NULL,
@@ -77,7 +80,7 @@ CREATE TABLE "payment_provider_customers" (
 );
 
 CREATE TABLE "payment_methods" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "user_id" uuid NOT NULL,
   "provider" TEXT NOT NULL,
   "method_type" TEXT NOT NULL CHECK ("method_type" IN ('card','promptpay')),
@@ -92,10 +95,10 @@ CREATE TABLE "payment_methods" (
 );
 
 CREATE TABLE "invoices" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "user_id" uuid NOT NULL,
-  "subscription_id" BIGINT,
-  "plan_id" BIGINT NOT NULL,
+  "subscription_id" uuid,
+  "plan_id" uuid NOT NULL,
   "amount_minor" INT NOT NULL CHECK ("amount_minor" >= 0),
   "period_start" timestamptz NOT NULL,
   "period_end" timestamptz NOT NULL,
@@ -106,12 +109,12 @@ CREATE TABLE "invoices" (
 );
 
 CREATE TABLE "payments" (
-  "id" BIGSERIAL PRIMARY KEY,
-  "invoice_id" BIGINT NOT NULL,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "invoice_id" uuid NOT NULL,
   "user_id" uuid NOT NULL,
   "provider" TEXT NOT NULL,
   "method_type" TEXT NOT NULL CHECK ("method_type" IN ('card','promptpay')),
-  "payment_method_id" BIGINT,
+  "payment_method_id" uuid,
   "amount_minor" INT NOT NULL CHECK ("amount_minor" >= 0),
   "status" TEXT NOT NULL CHECK ("status" IN ('requires_action','processing','succeeded','failed','canceled')),
   "provider_payment_id" TEXT,
@@ -127,7 +130,7 @@ CREATE TABLE "payments" (
 -- =========================
 
 CREATE TABLE "live_accounts" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "platform" TEXT NOT NULL,
   "account_id" TEXT NOT NULL,
   "canonical_url" TEXT NOT NULL,
@@ -138,7 +141,7 @@ CREATE TABLE "live_accounts" (
 
 CREATE TABLE "follows" (
   "user_id" uuid NOT NULL,
-  "live_account_id" BIGINT NOT NULL,
+  "live_account_id" uuid NOT NULL,
   "status" TEXT NOT NULL CHECK ("status" IN ('active','inactive','temporary_inactive')) DEFAULT 'active',
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),
@@ -146,8 +149,8 @@ CREATE TABLE "follows" (
 );
 
 CREATE TABLE "recordings" (
-  "id" BIGSERIAL PRIMARY KEY,
-  "live_account_id" BIGINT NOT NULL,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "live_account_id" uuid NOT NULL,
   "recording_key" TEXT UNIQUE,
   "started_at" timestamptz NOT NULL,
   "ended_at" timestamptz,
@@ -166,8 +169,8 @@ CREATE TABLE "recordings" (
 -- =========================
 
 CREATE TABLE "deliveries" (
-  "id" BIGSERIAL PRIMARY KEY,
-  "recording_id" BIGINT NOT NULL,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "recording_id" uuid NOT NULL,
   "user_id" uuid NOT NULL,
   "via" TEXT NOT NULL CHECK ("via" IN ('web_notify','email','telegram')),
   "delivered_at" timestamptz,
@@ -176,7 +179,7 @@ CREATE TABLE "deliveries" (
 );
 
 CREATE TABLE "jobs" (
-  "id" BIGSERIAL PRIMARY KEY,
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "type" TEXT NOT NULL CHECK ("type" IN ('RecordingUpload', 'NotifyReady')),
   "payload" JSONB NOT NULL,
   "run_at" timestamptz NOT NULL DEFAULT now(),

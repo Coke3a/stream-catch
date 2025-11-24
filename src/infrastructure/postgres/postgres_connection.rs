@@ -1,5 +1,8 @@
-use diesel::{PgConnection, r2d2::{ConnectionManager, Pool}};
 use anyhow::Result;
+use diesel::{
+    PgConnection,
+    r2d2::{ConnectionManager, Pool},
+};
 
 pub type PgPoolSquad = Pool<ConnectionManager<PgConnection>>;
 

@@ -17,3 +17,4 @@ DROP TABLE IF EXISTS users CASCADE;
 
 -- Finally, remove extension used by users.email
 DROP EXTENSION IF EXISTS citext;
+DROP EXTENSION IF EXISTS pgcrypto;

@@ -1,8 +1,11 @@
+use anyhow::Result;
 use std::sync::Arc;
 use uuid::Uuid;
-use anyhow::Result;
 
-use crate::domain::{repositories::subscriptions::SubscriptionRepository, value_objects::subscriptions::{InsertSubscriptionModel, PlanModel, SubscriptionModel}};
+use crate::domain::{
+    repositories::subscriptions::SubscriptionRepository,
+    value_objects::subscriptions::{InsertSubscriptionModel, PlanModel, SubscriptionModel},
+};
 
 pub struct SubscriptionUseCase<T>
 where
@@ -27,15 +30,22 @@ where
     pub async fn list_plans(&self) -> Result<Vec<PlanModel>> {
         unimplemented!()
     }
-    
-    pub async fn check_current_user_subscription(&self, user_id: Uuid) -> Result<SubscriptionModel> {
+
+    pub async fn check_current_user_subscription(
+        &self,
+        user_id: Uuid,
+    ) -> Result<SubscriptionModel> {
         unimplemented!()
     }
-    
-    pub async fn subscribe(&self, user_id: Uuid, insert_subscription_model: InsertSubscriptionModel) -> Result<()> {
+
+    pub async fn subscribe(
+        &self,
+        user_id: Uuid,
+        insert_subscription_model: InsertSubscriptionModel,
+    ) -> Result<()> {
         unimplemented!()
     }
-    
+
     pub async fn cancel_subscription(&self) -> Result<()> {
         unimplemented!()
     }

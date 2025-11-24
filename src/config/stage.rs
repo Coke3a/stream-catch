@@ -1,5 +1,5 @@
-use std::fmt;
 use anyhow::{Ok, Result};
+use std::fmt;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum Stage {
@@ -16,7 +16,7 @@ impl fmt::Display for Stage {
             Stage::Development => "Development",
             Stage::Production => "Production",
         };
-        
+
         write!(f, "{}", stage)
     }
 }
@@ -28,6 +28,6 @@ impl Stage {
             "Development" => Ok(Self::Development),
             "Production" => Ok(Self::Production),
             _ => Err(anyhow::anyhow!("Invalid stage")),
-        } 
+        }
     }
 }

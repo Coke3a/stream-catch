@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
-use uuid::Uuid;
 use anyhow::Result;
+use uuid::Uuid;
 
-use crate::domain::{repositories::recording_dashboard::RecordingDashboardRepository, value_objects::recordings::RecordingModel};
+use crate::domain::{
+    repositories::recording_dashboard::RecordingDashboardRepository,
+    value_objects::recordings::RecordingModel,
+};
 
 pub struct RecordingDashboardUseCase<T>
 where

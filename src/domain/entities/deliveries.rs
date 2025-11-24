@@ -7,8 +7,8 @@ use crate::infrastructure::postgres::schema::deliveries;
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = deliveries)]
 pub struct DeliveryEntity {
-    pub id: i64,
-    pub recording_id: i64,
+    pub id: Uuid,
+    pub recording_id: Uuid,
     pub user_id: Uuid,
     pub via: String,
     pub delivered_at: Option<DateTime<Utc>>,
@@ -19,7 +19,7 @@ pub struct DeliveryEntity {
 #[derive(Debug, Clone, Insertable)]
 #[diesel(table_name = deliveries)]
 pub struct InsertDeliveryEntity {
-    pub recording_id: i64,
+    pub recording_id: Uuid,
     pub user_id: Uuid,
     pub via: String,
     pub delivered_at: Option<DateTime<Utc>>,

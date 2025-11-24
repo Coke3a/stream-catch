@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::domain::{
     entities::jobs::{InsertJobEntity, JobEntity, UpdateJobEntity},
@@ -9,7 +10,7 @@ use crate::domain::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct JobModel {
-    pub id: i64,
+    pub id: Uuid,
     pub type_: JobType,
     pub payload: Value,
     pub run_at: DateTime<Utc>,

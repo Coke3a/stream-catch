@@ -7,7 +7,7 @@ use crate::infrastructure::postgres::schema::payment_methods;
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = payment_methods)]
 pub struct PaymentMethodEntity {
-    pub id: i64,
+    pub id: Uuid,
     pub user_id: Uuid,
     pub provider: String,
     pub method_type: String,

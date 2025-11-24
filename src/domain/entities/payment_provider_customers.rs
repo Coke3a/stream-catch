@@ -8,7 +8,7 @@ use crate::infrastructure::postgres::schema::payment_provider_customers;
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = payment_provider_customers)]
 pub struct PaymentProviderCustomerEntity {
-    pub id: i64,
+    pub id: Uuid,
     pub user_id: Uuid,
     pub provider: String,
     pub customer_ref: String,

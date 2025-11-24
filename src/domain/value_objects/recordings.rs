@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::domain::{
     entities::recordings::{InsertRecordingEntity, UpdateRecordingEntity},
@@ -10,8 +11,8 @@ use crate::domain::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordingModel {
-    pub id: i64,
-    pub live_account_id: i64,
+    pub id: Uuid,
+    pub live_account_id: Uuid,
     pub recording_key: Option<String>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
@@ -26,7 +27,7 @@ pub struct RecordingModel {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InsertRecordingModel {
-    pub live_account_id: i64,
+    pub live_account_id: Uuid,
     pub recording_key: Option<String>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
@@ -88,7 +89,7 @@ impl UpdateRecordingModel {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ListRecordingsFilter {
-    pub live_account_id: Option<String>,
+    pub live_account_id: Option<Uuid>,
     pub platform: Option<Platform>,
     pub status: Option<RecordingStatus>,
     pub limit: Option<i64>,

@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use uuid::Uuid;
 
 use crate::infrastructure::postgres::schema::live_accounts;
 
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = live_accounts)]
 pub struct LiveAccountEntity {
-    pub id: i64,
+    pub id: Uuid,
     pub platform: String,
     pub account_id: String,
     pub canonical_url: String,
@@ -25,4 +26,3 @@ pub struct InsertLiveAccountEntity {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-

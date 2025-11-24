@@ -7,10 +7,10 @@ use crate::infrastructure::postgres::schema::invoices;
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = invoices)]
 pub struct InvoiceEntity {
-    pub id: i64,
+    pub id: Uuid,
     pub user_id: Uuid,
-    pub subscription_id: Option<i64>,
-    pub plan_id: i64,
+    pub subscription_id: Option<Uuid>,
+    pub plan_id: Uuid,
     pub amount_minor: i32,
     pub period_start: DateTime<Utc>,
     pub period_end: DateTime<Utc>,
@@ -24,8 +24,8 @@ pub struct InvoiceEntity {
 #[diesel(table_name = invoices)]
 pub struct InsertInvoiceEntity {
     pub user_id: Uuid,
-    pub subscription_id: Option<i64>,
-    pub plan_id: i64,
+    pub subscription_id: Option<Uuid>,
+    pub plan_id: Uuid,
     pub amount_minor: i32,
     pub period_start: DateTime<Utc>,
     pub period_end: DateTime<Utc>,
