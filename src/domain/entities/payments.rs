@@ -7,12 +7,12 @@ use crate::infrastructure::postgres::schema::payments;
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = payments)]
 pub struct PaymentEntity {
-    pub id: i64,
-    pub invoice_id: i64,
+    pub id: Uuid,
+    pub invoice_id: Uuid,
     pub user_id: Uuid,
     pub provider: String,
     pub method_type: String,
-    pub payment_method_id: Option<i64>,
+    pub payment_method_id: Option<Uuid>,
     pub amount_minor: i32,
     pub status: String,
     pub provider_payment_id: Option<String>,
@@ -25,11 +25,11 @@ pub struct PaymentEntity {
 #[derive(Debug, Clone, Insertable)]
 #[diesel(table_name = payments)]
 pub struct InsertPaymentEntity {
-    pub invoice_id: i64,
+    pub invoice_id: Uuid,
     pub user_id: Uuid,
     pub provider: String,
     pub method_type: String,
-    pub payment_method_id: Option<i64>,
+    pub payment_method_id: Option<Uuid>,
     pub amount_minor: i32,
     pub status: String,
     pub provider_payment_id: Option<String>,

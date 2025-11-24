@@ -9,18 +9,17 @@ use crate::infrastructure::postgres::schema::follows;
 #[diesel(table_name = follows)]
 pub struct FollowEntity {
     pub user_id: Uuid,
-    pub live_account_id: i64,
+    pub live_account_id: Uuid,
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-
 #[derive(Debug, Clone, Insertable, Queryable)]
 #[diesel(table_name = follows)]
 pub struct InsertFollowEntity {
     pub user_id: Uuid,
-    pub live_account_id: i64,
+    pub live_account_id: Uuid,
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

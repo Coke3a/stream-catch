@@ -3,7 +3,16 @@ use std::sync::Arc;
 use axum::{Extension, Json, Router, extract::State, response::IntoResponse};
 use uuid::Uuid;
 
-use crate::{application::usercases::subscriptions::SubscriptionUseCase, domain::{repositories::subscriptions::SubscriptionRepository, value_objects::subscriptions::InsertSubscriptionModel}, infrastructure::postgres::{postgres_connection::PgPoolSquad, repositories::subscriptions::SubscriptionPostgres}};
+use crate::{
+    application::usercases::subscriptions::SubscriptionUseCase,
+    domain::{
+        repositories::subscriptions::SubscriptionRepository,
+        value_objects::subscriptions::InsertSubscriptionModel,
+    },
+    infrastructure::postgres::{
+        postgres_connection::PgPoolSquad, repositories::subscriptions::SubscriptionPostgres,
+    },
+};
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let subscriptions_repository = SubscriptionPostgres::new(Arc::clone(&db_pool));
@@ -12,14 +21,12 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     Router::new()
 }
 
-
 pub async fn list_plans<T>(
     State(subscriptions_usecase): State<Arc<SubscriptionUseCase<T>>>,
 ) -> impl IntoResponse
 where
     T: SubscriptionRepository + Send + Sync,
 {
-
 }
 
 pub async fn check_current_user_subscription<T>(
@@ -29,7 +36,6 @@ pub async fn check_current_user_subscription<T>(
 where
     T: SubscriptionRepository + Send + Sync,
 {
-
 }
 
 pub async fn subscribe<T>(
@@ -40,7 +46,6 @@ pub async fn subscribe<T>(
 where
     T: SubscriptionRepository + Send + Sync,
 {
-
 }
 
 pub async fn cancel_subscription<T>(
@@ -50,6 +55,4 @@ pub async fn cancel_subscription<T>(
 where
     T: SubscriptionRepository + Send + Sync,
 {
-
 }
-

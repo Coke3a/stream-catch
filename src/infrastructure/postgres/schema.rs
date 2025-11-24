@@ -11,8 +11,8 @@ diesel::table! {
 
 diesel::table! {
     deliveries (id) {
-        id -> Int8,
-        recording_id -> Int8,
+        id -> Uuid,
+        recording_id -> Uuid,
         user_id -> Uuid,
         via -> Text,
         delivered_at -> Nullable<Timestamptz>,
@@ -24,7 +24,7 @@ diesel::table! {
 diesel::table! {
     follows (user_id, live_account_id) {
         user_id -> Uuid,
-        live_account_id -> Int8,
+        live_account_id -> Uuid,
         status -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
@@ -33,10 +33,10 @@ diesel::table! {
 
 diesel::table! {
     invoices (id) {
-        id -> Int8,
+        id -> Uuid,
         user_id -> Uuid,
-        subscription_id -> Nullable<Int8>,
-        plan_id -> Int8,
+        subscription_id -> Nullable<Uuid>,
+        plan_id -> Uuid,
         amount_minor -> Int4,
         period_start -> Timestamptz,
         period_end -> Timestamptz,
@@ -49,7 +49,7 @@ diesel::table! {
 
 diesel::table! {
     jobs (id) {
-        id -> Int8,
+        id -> Uuid,
         #[sql_name = "type"]
         type_ -> Text,
         payload -> Jsonb,
@@ -65,7 +65,7 @@ diesel::table! {
 
 diesel::table! {
     live_accounts (id) {
-        id -> Int8,
+        id -> Uuid,
         platform -> Text,
         account_id -> Text,
         canonical_url -> Text,
@@ -77,7 +77,7 @@ diesel::table! {
 
 diesel::table! {
     payment_methods (id) {
-        id -> Int8,
+        id -> Uuid,
         user_id -> Uuid,
         provider -> Text,
         method_type -> Text,
@@ -94,7 +94,7 @@ diesel::table! {
 
 diesel::table! {
     payment_provider_customers (id) {
-        id -> Int8,
+        id -> Uuid,
         user_id -> Uuid,
         provider -> Text,
         customer_ref -> Text,
@@ -105,12 +105,12 @@ diesel::table! {
 
 diesel::table! {
     payments (id) {
-        id -> Int8,
-        invoice_id -> Int8,
+        id -> Uuid,
+        invoice_id -> Uuid,
         user_id -> Uuid,
         provider -> Text,
         method_type -> Text,
-        payment_method_id -> Nullable<Int8>,
+        payment_method_id -> Nullable<Uuid>,
         amount_minor -> Int4,
         status -> Text,
         provider_payment_id -> Nullable<Text>,
@@ -123,7 +123,7 @@ diesel::table! {
 
 diesel::table! {
     plans (id) {
-        id -> Int8,
+        id -> Uuid,
         name -> Nullable<Text>,
         price_minor -> Int4,
         duration_days -> Int4,
@@ -134,8 +134,8 @@ diesel::table! {
 
 diesel::table! {
     recordings (id) {
-        id -> Int8,
-        live_account_id -> Int8,
+        id -> Uuid,
+        live_account_id -> Uuid,
         recording_key -> Nullable<Text>,
         started_at -> Timestamptz,
         ended_at -> Nullable<Timestamptz>,
@@ -151,13 +151,13 @@ diesel::table! {
 
 diesel::table! {
     subscriptions (id) {
-        id -> Int8,
+        id -> Uuid,
         user_id -> Uuid,
-        plan_id -> Int8,
+        plan_id -> Uuid,
         starts_at -> Timestamptz,
         ends_at -> Timestamptz,
         billing_mode -> Text,
-        default_payment_method_id -> Nullable<Int8>,
+        default_payment_method_id -> Nullable<Uuid>,
         cancel_at_period_end -> Bool,
         canceled_at -> Nullable<Timestamptz>,
         status -> Text,

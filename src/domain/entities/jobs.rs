@@ -1,13 +1,14 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::infrastructure::postgres::schema::jobs;
 
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = jobs)]
 pub struct JobEntity {
-    pub id: i64,
+    pub id: Uuid,
     pub type_: String,
     pub payload: Value,
     pub run_at: DateTime<Utc>,

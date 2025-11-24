@@ -1,13 +1,14 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use uuid::Uuid;
 
 use crate::infrastructure::postgres::schema::recordings;
 
 #[derive(Debug, Clone, Identifiable, Selectable, Queryable)]
 #[diesel(table_name = recordings)]
 pub struct RecordingEntity {
-    pub id: i64,
-    pub live_account_id: i64,
+    pub id: Uuid,
+    pub live_account_id: Uuid,
     pub recording_key: Option<String>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
@@ -23,7 +24,7 @@ pub struct RecordingEntity {
 #[derive(Debug, Clone, Insertable, Queryable)]
 #[diesel(table_name = recordings)]
 pub struct InsertRecordingEntity {
-    pub live_account_id: i64,
+    pub live_account_id: Uuid,
     pub recording_key: Option<String>,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,

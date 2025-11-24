@@ -1,6 +1,5 @@
-use std::fmt::Display;
 use serde::{Deserialize, Serialize};
-
+use std::fmt::Display;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UserStatus {
