@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS payment_provider_customers CASCADE;
 DROP TABLE IF EXISTS live_accounts CASCADE;
 DROP TABLE IF EXISTS plans CASCADE;
 DROP TABLE IF EXISTS password_reset_tokens CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS app_users CASCADE;
 
 -- Finally, remove extension used by users.email
 DROP EXTENSION IF EXISTS citext;

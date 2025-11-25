@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{
     Extension, Json, Router,
     extract::{Path, Query, State},
-    response::IntoResponse,
+    response::IntoResponse, routing::{delete, get, post},
 };
 use uuid::Uuid;
 
@@ -24,6 +24,10 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let live_following_usecase = LiveFollowingUseCase::new(Arc::new(live_following_repository));
 
     Router::new()
+        .route("/", post(follow))
+        .route("/", delete(unfollow))
+        .route("/", get(list))
+        .with_state(Arc::new(live_following_usecase))
 }
 
 pub async fn follow<T>(
@@ -58,7 +62,7 @@ where
     // else set follow status to Inactive
 }
 
-pub async fn list_follows<T>(
+pub async fn list<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
     Extension(user_id): Extension<Uuid>,
 ) -> impl IntoResponse

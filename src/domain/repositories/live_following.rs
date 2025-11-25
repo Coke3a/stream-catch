@@ -16,7 +16,7 @@ pub trait LiveFollowingRepository {
         live_account_entry: InsertLiveAccountEntity,
     ) -> Result<Uuid>;
     async fn follow(&self, follow_entity: InsertFollowEntity) -> Result<Uuid>;
-    async fn unfollow(&self, follow_id: Uuid) -> Result<()>;
+    async fn unfollow(&self, user_id: Uuid, live_account_id: Uuid) -> Result<()>;
     async fn list_following_live_accounts(
         &self,
         user_id: Uuid,
@@ -24,6 +24,6 @@ pub trait LiveFollowingRepository {
     ) -> Result<Vec<LiveAccountEntity>>;
     async fn find_live_account(
         &self,
-        follow_entity: &FindLiveAccountModel,
+        find_live_account_model: &FindLiveAccountModel,
     ) -> Result<LiveAccountEntity>;
 }

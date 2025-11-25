@@ -19,7 +19,7 @@ pub struct FollowEntity {
 #[diesel(table_name = follows)]
 pub struct InsertFollowEntity {
     pub user_id: Uuid,
-    pub live_account_id: Uuid,
+    pub live_account_id: Option<Uuid>,
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

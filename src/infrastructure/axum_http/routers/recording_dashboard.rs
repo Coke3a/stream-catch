@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{Extension, Router, extract::State, response::IntoResponse};
+use axum::{Extension, Router, extract::State, response::IntoResponse, routing::get};
 use tracing_subscriber::field::RecordFields;
 use uuid::Uuid;
 
@@ -19,6 +19,8 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
         RecordingDashboardUseCase::new(Arc::new(recording_dashboard_repository));
 
     Router::new()
+        .route("/", get(list_recording))
+        .with_state(Arc::new(recording_dashboard_usecase))
 }
 
 pub async fn list_recording<T>(

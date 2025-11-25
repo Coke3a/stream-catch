@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum FollowStatus {
     #[default]
     Active,

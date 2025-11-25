@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::{Extension, Json, Router, extract::State, response::IntoResponse};
+use axum::{Extension, Json, Router, extract::State, response::IntoResponse, routing::{get, post}};
 use uuid::Uuid;
 
 use crate::{
@@ -19,6 +19,11 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let subscriptions_usecase = SubscriptionUseCase::new(Arc::new(subscriptions_repository));
 
     Router::new()
+        .route("/plans", get(list_plans))
+        .route("/current", get(check_current_user_subscription))
+        .route("/subscribe", post(subscribe))
+        .route("/cancel", post(cancel_subscription))
+        .with_state(Arc::new(subscriptions_usecase))
 }
 
 pub async fn list_plans<T>(

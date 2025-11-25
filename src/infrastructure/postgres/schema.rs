@@ -165,22 +165,22 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(deliveries -> recordings (recording_id));
 diesel::joinable!(deliveries -> app_users (user_id));
-diesel::joinable!(follows -> live_accounts (live_account_id));
+diesel::joinable!(deliveries -> recordings (recording_id));
 diesel::joinable!(follows -> app_users (user_id));
+diesel::joinable!(follows -> live_accounts (live_account_id));
+diesel::joinable!(invoices -> app_users (user_id));
 diesel::joinable!(invoices -> plans (plan_id));
 diesel::joinable!(invoices -> subscriptions (subscription_id));
-diesel::joinable!(invoices -> app_users (user_id));
 diesel::joinable!(payment_methods -> app_users (user_id));
 diesel::joinable!(payment_provider_customers -> app_users (user_id));
+diesel::joinable!(payments -> app_users (user_id));
 diesel::joinable!(payments -> invoices (invoice_id));
 diesel::joinable!(payments -> payment_methods (payment_method_id));
-diesel::joinable!(payments -> app_users (user_id));
 diesel::joinable!(recordings -> live_accounts (live_account_id));
+diesel::joinable!(subscriptions -> app_users (user_id));
 diesel::joinable!(subscriptions -> payment_methods (default_payment_method_id));
 diesel::joinable!(subscriptions -> plans (plan_id));
-diesel::joinable!(subscriptions -> app_users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     app_users,
