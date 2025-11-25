@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use stream_catch::{
+use infra_postgres::{
     config::config_loader,
     infrastructure::{axum_http::http_serve::start, postgres::postgres_connection},
 };

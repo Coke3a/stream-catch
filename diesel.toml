@@ -2,8 +2,8 @@
 # see https://diesel.rs/guides/configuring-diesel-cli
 
 [print_schema]
-file = "src/infrastructure/postgres/schema.rs"
+file = "crates/infra_postgres/src/infrastructure/postgres/schema.rs"
 custom_type_derives = ["diesel::query_builder::QueryId", "Clone"]
 
 [migrations_directory]
-dir = "src/infrastructure/postgres/migrations"
+dir = "crates/infra_postgres/src/infrastructure/postgres/migrations"
