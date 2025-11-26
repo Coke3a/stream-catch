@@ -1,6 +1,6 @@
 use anyhow::Result;
 use axum::async_trait;
-use diesel::{RunQueryDsl, prelude::*, query_dsl::methods::FilterDsl};
+use diesel::{RunQueryDsl, prelude::*};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -50,11 +50,11 @@ impl RecordingDashboardRepository for RecordingDashboardPostgres {
             query = query.filter(recordings::live_account_id.eq(live_account_id));
         }
 
-        if let Some(platform) = filter.platform {
+        if let Some(platform) = &filter.platform {
             query = query.filter(live_accounts::platform.eq(platform.to_string()));
         }
 
-        if let Some(status) = filter.status {
+        if let Some(status) = &filter.status {
             query = query.filter(recordings::status.eq(status.to_string()));
         }
 
