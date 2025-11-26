@@ -3,9 +3,9 @@
 diesel::table! {
     app_users (id) {
         id -> Uuid,
-        display_name -> Nullable<Text>,
         status -> Text,
         created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 

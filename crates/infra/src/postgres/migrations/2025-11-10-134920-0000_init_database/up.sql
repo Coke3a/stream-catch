@@ -31,9 +31,9 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE TABLE "app_users" (
   "id" uuid PRIMARY KEY,
-  "display_name" TEXT,
   "status" TEXT NOT NULL CHECK ("status" IN ('active','blocked','inactive')) DEFAULT 'active',
-  "created_at" timestamptz NOT NULL DEFAULT now()
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now()
 );
 
 
@@ -318,7 +318,7 @@ ALTER TABLE "deliveries"
 ALTER TABLE "deliveries"
   ADD FOREIGN KEY ("user_id") REFERENCES "app_users"("id");
 
-  
+
 -- trigger when create user in subapase
 create or replace function public.handle_new_user()
 returns trigger
@@ -326,8 +326,8 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-insert into public.app_users (id, display_name, status)
-values (new.id, new.raw_user_meta_data->>'display_name', 'active');
+insert into public.app_users (id, status)
+values (new.id, 'active');
 return new;
 end;
 $$;
