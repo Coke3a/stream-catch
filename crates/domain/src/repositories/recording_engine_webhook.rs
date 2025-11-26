@@ -3,14 +3,17 @@ use async_trait::async_trait;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::entities::{
-    jobs::InsertJobEntity,
-    recordings::{InsertRecordingEntity},
-};
+use crate::{entities::recordings::{InsertRecordingEntity, RecordingEntity}, value_objects::enums::recording_statuses::RecordingStatus};
 
 #[async_trait]
 #[automock]
 pub trait RecordingJobRepository {
+    async fn find_recording_by_live_account_and_status(
+        &self,
+        platform: String,
+        account_id: Uuid,
+        status: RecordingStatus,
+    ) -> Result<Option<RecordingEntity>>;
     async fn insert(
         &self,
         insert_recording_entity: InsertRecordingEntity,
