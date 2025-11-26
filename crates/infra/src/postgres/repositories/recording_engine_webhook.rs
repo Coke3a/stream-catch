@@ -1,15 +1,18 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chrono::Utc;
+use diesel::{OptionalExtension, RunQueryDsl, insert_into, prelude::*, update};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::postgres::postgres_connection::PgPoolSquad;
+use crate::postgres::{
+    postgres_connection::PgPoolSquad,
+    schema::{live_accounts, recordings},
+};
 use domain::{
-    entities::{
-        jobs::InsertJobEntity,
-        recordings::{InsertRecordingEntity, UpdateRecordingEntity},
-    },
+    entities::recordings::{InsertRecordingEntity, RecordingEntity},
     repositories::recording_engine_webhook::RecordingJobRepository,
+    value_objects::enums::recording_statuses::RecordingStatus,
 };
 
 pub struct RecordingJobPostgres {
@@ -24,25 +27,89 @@ impl RecordingJobPostgres {
 
 #[async_trait]
 impl RecordingJobRepository for RecordingJobPostgres {
-    async fn webhook_recording_start(
+    async fn find_recording_by_live_account_and_status(
         &self,
-        insert_recording_entity: InsertRecordingEntity,
-    ) -> Result<Uuid> {
-        unimplemented!()
+        platform: String,
+        account_id: String,
+        status: RecordingStatus,
+    ) -> Result<Option<RecordingEntity>> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let result = recordings::table
+            .inner_join(live_accounts::table.on(recordings::live_account_id.eq(live_accounts::id)))
+            .select(RecordingEntity::as_select())
+            .filter(live_accounts::platform.eq(platform))
+            .filter(live_accounts::account_id.eq(account_id))
+            .filter(recordings::status.eq(status.to_string()))
+            .first::<RecordingEntity>(&mut conn)
+            .optional()?;
+
+        Ok(result)
     }
-    async fn webhook_recording_end(
+
+    async fn insert(&self, insert_recording_entity: InsertRecordingEntity) -> Result<Uuid> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let result = insert_into(recordings::table)
+            .values(&insert_recording_entity)
+            .returning(recordings::id)
+            .get_result::<Uuid>(&mut conn)?;
+
+        Ok(result)
+    }
+
+    async fn update_live_end(&self, recording_id: Uuid, duration: i64) -> Result<Uuid> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let duration_i32 =
+            i32::try_from(duration).context("duration value does not fit into i32 column")?;
+        let now = Utc::now();
+
+        let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
+            .set((
+                recordings::duration_sec.eq(Some(duration_i32)),
+                recordings::ended_at.eq(Some(now)),
+                recordings::status.eq(RecordingStatus::LiveEnd.to_string()),
+                recordings::updated_at.eq(now),
+            ))
+            .returning(recordings::id)
+            .get_result::<Uuid>(&mut conn)?;
+
+        Ok(result)
+    }
+
+    async fn update_live_transmux_finish(
         &self,
-        update_recording_entity: UpdateRecordingEntity,
+        recording_id: Uuid,
+        storage_path: String,
     ) -> Result<Uuid> {
-        unimplemented!()
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+        let now = Utc::now();
+
+        let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
+            .set((
+                recordings::storage_path.eq(Some(storage_path)),
+                recordings::status.eq(RecordingStatus::WaitingUpload.to_string()),
+                recordings::updated_at.eq(now),
+            ))
+            .returning(recordings::id)
+            .get_result::<Uuid>(&mut conn)?;
+
+        Ok(result)
     }
-    async fn upload_recording_job_start(&self, insert_job_entity: InsertJobEntity) -> Result<Uuid> {
-        unimplemented!()
-    }
-    async fn upload_recording_job_end(
-        &self,
-        update_recording_entity: UpdateRecordingEntity,
-    ) -> Result<Uuid> {
-        unimplemented!()
+
+    async fn update_file_uploading(&self, recording_id: Uuid) -> Result<Uuid> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+        let now = Utc::now();
+
+        let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
+            .set((
+                recordings::status.eq(RecordingStatus::Uploading.to_string()),
+                recordings::updated_at.eq(now),
+            ))
+            .returning(recordings::id)
+            .get_result::<Uuid>(&mut conn)?;
+
+        Ok(result)
     }
 }
