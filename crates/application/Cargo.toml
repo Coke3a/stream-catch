@@ -1,0 +1,10 @@
+[package]
+name = "application"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+domain = { path = "../domain" }
+anyhow = "1.0.93"
+async-trait = "0.1.83"
+uuid = { version = "1.11.0", features = ["serde", "v4"] }
