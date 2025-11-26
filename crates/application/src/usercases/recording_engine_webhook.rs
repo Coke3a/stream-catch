@@ -1,16 +1,16 @@
-use anyhow::Result;
+// use anyhow::Result;
 
-use domain::value_objects::recording_engine_webhook::RecordingEngineWebhook;
+// use domain::value_objects::recording_engine_webhook::;
 
-pub struct RecordingEngineWebhookUseCase;
+// pub struct RecordingEngineWebhookUseCase;
 
-impl RecordingEngineWebhookUseCase {
-    pub fn new() -> Self {
-        Self
-    }
+// impl RecordingEngineWebhookUseCase {
+//     pub fn new() -> Self {
+//         Self
+//     }
 
-    pub async fn handle_webhook(&self, payload: RecordingEngineWebhook) -> Result<()> {
-        let _payload = payload;
-        unimplemented!()
-    }
-}
+//     pub async fn handle_webhook(&self, payload: RecordingEngineWebhook) -> Result<()> {
+//         let _payload = payload;
+//         unimplemented!()
+//     }
+// }

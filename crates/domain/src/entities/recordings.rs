@@ -36,17 +36,3 @@ pub struct InsertRecordingEntity {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Debug, Clone, AsChangeset, Queryable)]
-#[diesel(table_name = recordings)]
-pub struct UpdateRecordingEntity {
-    pub recording_key: Option<String>,
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
-    pub duration_sec: Option<i32>,
-    pub size_bytes: Option<i64>,
-    pub storage_prefix: Option<String>,
-    pub status: String,
-    pub poster_storage_path: Option<String>,
-    pub updated_at: DateTime<Utc>,
-}

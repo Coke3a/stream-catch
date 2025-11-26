@@ -9,7 +9,7 @@ use domain::{
         jobs::InsertJobEntity,
         recordings::{InsertRecordingEntity, UpdateRecordingEntity},
     },
-    repositories::recording_job::RecordingJobRepository,
+    repositories::recording_engine_webhook::RecordingJobRepository,
 };
 
 pub struct RecordingJobPostgres {

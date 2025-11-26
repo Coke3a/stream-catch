@@ -3,10 +3,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use domain::{
-    repositories::recording_job::RecordingJobRepository,
+    repositories::recording_engine_webhook::RecordingJobRepository,
     value_objects::{
         jobs::{InsertJobModel, UpdateJobModel},
-        recordings::{InsertRecordingModel, UpdateRecordingModel},
+        recordings::{InsertRecordingModel},
     },
 };
 

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entities::recordings::{InsertRecordingEntity, UpdateRecordingEntity},
+    entities::recordings::{InsertRecordingEntity},
     value_objects::enums::{
         platforms::Platform, recording_statuses::RecordingStatus, sort_order::SortOrder,
     },
@@ -50,38 +50,9 @@ impl InsertRecordingModel {
             duration_sec: self.duration_sec,
             size_bytes: self.size_bytes,
             storage_prefix: self.storage_prefix.clone(),
-            status: RecordingStatus::Processing.to_string(),
+            status: RecordingStatus::LiveRecording.to_string(),
             poster_storage_path: self.poster_storage_path.clone(),
             created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct UpdateRecordingModel {
-    pub recording_key: Option<String>,
-    pub started_at: DateTime<Utc>,
-    pub ended_at: Option<DateTime<Utc>>,
-    pub duration_sec: Option<i32>,
-    pub size_bytes: Option<i64>,
-    pub storage_prefix: Option<String>,
-    pub status: RecordingStatus,
-    pub poster_storage_path: Option<String>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl UpdateRecordingModel {
-    pub fn to_entity(&self) -> UpdateRecordingEntity {
-        UpdateRecordingEntity {
-            recording_key: self.recording_key.clone(),
-            started_at: self.started_at,
-            ended_at: self.ended_at,
-            duration_sec: self.duration_sec,
-            size_bytes: self.size_bytes,
-            storage_prefix: self.storage_prefix.clone(),
-            status: self.status.to_string(),
-            poster_storage_path: self.poster_storage_path.clone(),
             updated_at: Utc::now(),
         }
     }
