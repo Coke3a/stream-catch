@@ -1,9 +1,9 @@
 use axum::{
     async_trait,
     extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
+    http::{StatusCode, request::Parts},
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -45,14 +45,17 @@ impl axum::response::IntoResponse for AuthError {
 }
 
 pub fn validate_supabase_jwt(token: &str) -> Result<SupabaseClaims, AuthError> {
-    let config = config_loader::load().map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let config =
+        config_loader::load().map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let secret = config.supabase.jwt_secret;
 
     let decoding_key = DecodingKey::from_secret(secret.as_bytes());
-    let validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+    let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+    validation.set_audience(&["authenticated", "service_role"]);
 
-    let token_data = decode::<SupabaseClaims>(token, &decoding_key, &validation)
-        .map_err(|e| anyhow::anyhow!("JWT validation failed: {}", e))?;
+    let token_data = decode::<SupabaseClaims>(token, &decoding_key, &validation).map_err(|e| {
+        anyhow::anyhow!("JWT validation failed: {}", e)
+    })?;
 
     Ok(token_data.claims)
 }
@@ -69,25 +72,39 @@ where
         let auth_header = parts
             .headers
             .get(axum::http::header::AUTHORIZATION)
-            .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
+            .ok_or((
+                StatusCode::UNAUTHORIZED,
+                "Missing Authorization header".to_string(),
+            ))?;
 
-        let auth_str = auth_header
-            .to_str()
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid Authorization header".to_string()))?;
+        let auth_str = auth_header.to_str().map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid Authorization header".to_string(),
+            )
+        })?;
 
         // 2. Expect "Bearer <token>"
         if !auth_str.starts_with("Bearer ") {
-            return Err((StatusCode::UNAUTHORIZED, "Invalid Authorization header format".to_string()));
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Invalid Authorization header format".to_string(),
+            ));
         }
 
         let token = &auth_str[7..];
 
         // 3. Validate JWT
-        let claims = validate_supabase_jwt(token).map_err(|e| (StatusCode::UNAUTHORIZED, e.0.to_string()))?;
+        let claims = validate_supabase_jwt(token)
+            .map_err(|e| (StatusCode::UNAUTHORIZED, e.0.to_string()))?;
 
         // 4. Parse sub to Uuid
-        let user_id = Uuid::parse_str(&claims.sub)
-            .map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid user ID in token".to_string()))?;
+        let user_id = Uuid::parse_str(&claims.sub).map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid user ID in token".to_string(),
+            )
+        })?;
 
         // 5. Return AuthUser
         Ok(AuthUser {

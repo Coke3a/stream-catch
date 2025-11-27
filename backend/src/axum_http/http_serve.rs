@@ -3,7 +3,14 @@ use crate::{
     config::config_model::DotEnvyConfig,
 };
 use anyhow::Result;
-use axum::{Router, http::Method, routing::get};
+use axum::{
+    Router,
+    http::{
+        Method,
+        header::{AUTHORIZATION, CONTENT_TYPE},
+    },
+    routing::get,
+};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tower_http::{
@@ -21,15 +28,15 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
         .fallback(default_routers::not_found)
         .nest(
             "/api/v1/live-following",
-            routers::live_following::routes(Arc::clone(&db_pool))
+            routers::live_following::routes(Arc::clone(&db_pool)),
         )
         .nest(
             "/api/v1/recording-dashboard",
-            routers::recording_dashboard::routes(Arc::clone(&db_pool))
+            routers::recording_dashboard::routes(Arc::clone(&db_pool)),
         )
         .nest(
             "/api/v1/subscriptions",
-            routers::subscriptions::routes(Arc::clone(&db_pool))
+            routers::subscriptions::routes(Arc::clone(&db_pool)),
         )
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
@@ -47,6 +54,7 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
                     Method::PUT,
                     Method::DELETE,
                 ])
+                .allow_headers([AUTHORIZATION, CONTENT_TYPE])
                 .allow_origin(Any), // TODO Add the domain later
         )
         .layer(TraceLayer::new_for_http());

@@ -3,19 +3,16 @@ use std::sync::Arc;
 use axum::{
     Extension, Json, Router,
     extract::{Path, Query, State},
-    response::IntoResponse, routing::{delete, get, post},
+    response::IntoResponse,
+    routing::{delete, get, post},
 };
 use uuid::Uuid;
 
-use crate::{auth::AuthUser, config::stage::Stage};
+use crate::auth::AuthUser;
 use application::usercases::live_following::LiveFollowingUseCase;
-use domain::{
-    repositories::live_following::LiveFollowingRepository,
-    value_objects::live_following::{InsertFollowLiveAccountModel, ListFollowsFilter},
-};
+use domain::repositories::live_following::LiveFollowingRepository;
 use infra::postgres::{
-    postgres_connection::PgPoolSquad,
-    repositories::live_following::LiveFollowingPostgres,
+    postgres_connection::PgPoolSquad, repositories::live_following::LiveFollowingPostgres,
 };
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
@@ -23,9 +20,8 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let live_following_usecase = LiveFollowingUseCase::new(Arc::new(live_following_repository));
 
     Router::new()
-        .route("/", post(follow))
-        .route("/", delete(unfollow))
         .route("/", get(list))
+        .route("/:value", post(follow).delete(unfollow))
         .with_state(Arc::new(live_following_usecase))
 }
 
@@ -42,21 +38,34 @@ where
     // Decode base64url
     let decoded_url_bytes = match general_purpose::URL_SAFE_NO_PAD.decode(&url) {
         Ok(bytes) => bytes,
-        Err(_) => return (axum::http::StatusCode::BAD_REQUEST, "Invalid base64url").into_response(),
+        Err(_) => {
+            return (axum::http::StatusCode::BAD_REQUEST, "Invalid base64url").into_response();
+        }
     };
 
     let decoded_url = match String::from_utf8(decoded_url_bytes) {
         Ok(s) => s,
-        Err(_) => return (axum::http::StatusCode::BAD_REQUEST, "Invalid UTF-8 sequence").into_response(),
+        Err(_) => {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                "Invalid UTF-8 sequence",
+            )
+                .into_response();
+        }
     };
 
-    match live_following_usecase.follow(auth.user_id, decoded_url).await {
+    match live_following_usecase
+        .follow(auth.user_id, decoded_url)
+        .await
+    {
         Ok(_) => (axum::http::StatusCode::OK, "Followed successfully").into_response(),
         Err(e) => {
             let error_message = e.to_string();
             if error_message.contains("Follow already exists") {
                 (axum::http::StatusCode::CONFLICT, "Follow already exists").into_response()
-            } else if error_message.contains("Invalid URL") || error_message.contains("Unsupported platform") {
+            } else if error_message.contains("Invalid URL")
+                || error_message.contains("Unsupported platform")
+            {
                 (axum::http::StatusCode::BAD_REQUEST, error_message).into_response()
             } else {
                 (axum::http::StatusCode::INTERNAL_SERVER_ERROR, error_message).into_response()
