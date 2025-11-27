@@ -8,3 +8,5 @@ domain = { path = "../domain" }
 anyhow = "1.0.93"
 async-trait = "0.1.83"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
+url = "2.5.4"
+chrono = { version = "0.4.38", features = ["serde"] }

@@ -12,10 +12,10 @@ pub enum Platform {
 impl Display for Platform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let platform = match self {
-            Platform::YouTube => "YouTube",
-            Platform::TikTok => "TikTok",
-            Platform::Twitch => "Twitch",
-            Platform::Bigo => "Bigo",
+            Platform::YouTube => "youtube",
+            Platform::TikTok => "tiktok",
+            Platform::Twitch => "twitch",
+            Platform::Bigo => "bigo",
         };
         write!(f, "{}", platform)
     }
