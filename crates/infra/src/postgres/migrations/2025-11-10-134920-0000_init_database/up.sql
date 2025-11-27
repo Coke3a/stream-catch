@@ -134,7 +134,7 @@ CREATE TABLE "live_accounts" (
   "platform" TEXT NOT NULL,
   "account_id" TEXT NOT NULL,
   "canonical_url" TEXT NOT NULL,
-  "status" TEXT NOT NULL CHECK ("status" IN ('active','paused','error')) DEFAULT 'active',
+  "status" TEXT NOT NULL CHECK ("status" IN ('synced','unsynced','error')) DEFAULT 'unsynced',
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now()
 );
