@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use axum::{Extension, Json, Router, extract::State, response::IntoResponse, routing::{get, post}};
+use axum::{Json, Router, extract::State, response::IntoResponse, routing::{get, post}};
 use uuid::Uuid;
+
+use crate::auth::AuthUser;
 
 use application::usercases::subscriptions::SubscriptionUseCase;
 use domain::{
@@ -27,6 +29,7 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
 
 pub async fn list_plans<T>(
     State(subscriptions_usecase): State<Arc<SubscriptionUseCase<T>>>,
+    _auth: AuthUser,
 ) -> impl IntoResponse
 where
     T: SubscriptionRepository + Send + Sync,
@@ -35,7 +38,7 @@ where
 
 pub async fn check_current_user_subscription<T>(
     State(subscriptions_usecase): State<Arc<SubscriptionUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
 ) -> impl IntoResponse
 where
     T: SubscriptionRepository + Send + Sync,
@@ -44,7 +47,7 @@ where
 
 pub async fn subscribe<T>(
     State(subscriptions_usecase): State<Arc<SubscriptionUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
     Json(insert_subscription_model): Json<InsertSubscriptionModel>,
 ) -> impl IntoResponse
 where
@@ -54,7 +57,7 @@ where
 
 pub async fn cancel_subscription<T>(
     State(subscriptions_usecase): State<Arc<SubscriptionUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
 ) -> impl IntoResponse
 where
     T: SubscriptionRepository + Send + Sync,

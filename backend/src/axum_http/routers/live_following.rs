@@ -7,7 +7,7 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::config::stage::Stage;
+use crate::{auth::AuthUser, config::stage::Stage};
 use application::usercases::live_following::LiveFollowingUseCase;
 use domain::{
     repositories::live_following::LiveFollowingRepository,
@@ -31,7 +31,7 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
 
 pub async fn follow<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
     Path(url): Path<String>,
 ) -> impl IntoResponse
 where
@@ -49,7 +49,7 @@ where
 
 pub async fn unfollow<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
     Path(follow_id): Path<Uuid>,
 ) -> impl IntoResponse
 where
@@ -63,7 +63,7 @@ where
 
 pub async fn list<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
 ) -> impl IntoResponse
 where
     T: LiveFollowingRepository + Send + Sync,

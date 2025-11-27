@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use axum::{Extension, Router, extract::State, response::IntoResponse, routing::get};
+use crate::auth::AuthUser;
+use axum::{Router, extract::State, response::IntoResponse, routing::get};
 use tracing_subscriber::field::RecordFields;
 use uuid::Uuid;
 
@@ -23,7 +24,7 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
 
 pub async fn list_recording<T>(
     State(recording_dashboard_usecase): State<Arc<RecordingDashboardUseCase<T>>>,
-    Extension(user_id): Extension<Uuid>,
+    auth: AuthUser,
 ) -> impl IntoResponse
 where
     T: RecordingDashboardRepository + Send + Sync,

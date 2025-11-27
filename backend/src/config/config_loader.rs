@@ -25,7 +25,18 @@ pub fn load() -> Result<DotEnvyConfig> {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
     };
 
-    Ok(DotEnvyConfig { server, database })
+    let supabase = super::config_model::Supabase {
+        project_url: std::env::var("SUPABASE_PROJECT_URL")
+            .expect("SUPABASE_PROJECT_URL is invalid"),
+        jwt_secret: std::env::var("SUPABASE_JWT_SECRET")
+            .expect("SUPABASE_JWT_SECRET is invalid"),
+    };
+
+    Ok(DotEnvyConfig {
+        server,
+        database,
+        supabase,
+    })
 }
 
 pub fn get_stage() -> Stage {
