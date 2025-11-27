@@ -3,9 +3,11 @@ use axum::{
     extract::FromRequestParts,
     http::{StatusCode, request::Parts},
 };
+use chrono::Utc;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use tracing::debug;
 
 use crate::config::config_loader;
 
@@ -53,11 +55,15 @@ pub fn validate_supabase_jwt(token: &str) -> Result<SupabaseClaims, AuthError> {
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.set_audience(&["authenticated", "service_role"]);
 
-    let token_data = decode::<SupabaseClaims>(token, &decoding_key, &validation).map_err(|e| {
-        anyhow::anyhow!("JWT validation failed: {}", e)
-    })?;
+    let token_data = decode::<SupabaseClaims>(token, &decoding_key, &validation)
+        .map_err(|e| anyhow::anyhow!("JWT validation failed: {}", e))?;
 
-    Ok(token_data.claims)
+    let claims = token_data.claims;
+    let now = Utc::now().timestamp();
+    if claims.exp as i64 <= now {
+        return Err(AuthError(anyhow::anyhow!("JWT expired")));
+    }
+    Ok(claims)
 }
 
 #[async_trait]
