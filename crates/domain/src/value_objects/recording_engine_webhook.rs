@@ -20,23 +20,23 @@ struct StartData {
     live_info: Option<LiveInfo>,
 }
 
-// Recording end webhook
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RecordingEngineLiveEndWebhook {
-    pub id: Uuid,
-    pub ts: DateTime<Utc>,
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub data: EndData,
-}
+// // Recording end webhook // no use for now
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// pub struct RecordingEngineLiveEndWebhook {
+//     pub id: Uuid,
+//     pub ts: DateTime<Utc>,
+//     #[serde(rename = "type")]
+//     pub type_: String,
+//     pub data: EndData,
+// }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct EndData {
-    platform: Option<String>,
-    channel: Option<String>,
-    url: Option<String>,
-    live_info: Option<LiveInfo>,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// struct EndData {
+//     platform: Option<String>,
+//     channel: Option<String>,
+//     url: Option<String>,
+//     live_info: Option<LiveInfo>,
+// }
 
 
 // video_file_finish webhook
