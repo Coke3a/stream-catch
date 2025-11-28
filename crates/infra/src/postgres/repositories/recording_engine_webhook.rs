@@ -52,6 +52,22 @@ impl RecordingJobRepository for RecordingJobPostgres {
         Ok(result)
     }
 
+    async fn find_live_account_by_platform_and_account_id(
+        &self,
+        platform: String,
+        account_id: String,
+    ) -> Result<Option<LiveAccountEntity>> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let result = live_accounts::table
+            .filter(live_accounts::platform.eq(platform))
+            .filter(live_accounts::account_id.eq(account_id))
+            .first::<LiveAccountEntity>(&mut conn)
+            .optional()?;
+
+        Ok(result)
+    }
+
     async fn insert(&self, insert_recording_entity: InsertRecordingEntity) -> Result<Uuid> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 

@@ -33,4 +33,5 @@ pub struct AdminSecret {
 pub struct Supabase {
     pub project_url: String,
     pub jwt_secret: String,
+    pub poster_bucket: String,
 }

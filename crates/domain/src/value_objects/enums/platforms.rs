@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Platform {
@@ -18,5 +18,19 @@ impl Display for Platform {
             Platform::Bigo => "bigo",
         };
         write!(f, "{}", platform)
+    }
+}
+
+impl FromStr for Platform {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_lowercase().as_str() {
+            "youtube" => Ok(Platform::YouTube),
+            "tiktok" => Ok(Platform::TikTok),
+            "twitch" => Ok(Platform::Twitch),
+            "bigo" => Ok(Platform::Bigo),
+            other => Err(format!("Unsupported platform: {}", other)),
+        }
     }
 }

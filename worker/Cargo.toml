@@ -13,3 +13,4 @@ domain = { path = "../crates/domain" }
 application = { path = "../crates/application" }
 backend = { path = "../backend" }
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
+axum = "0.7.7"

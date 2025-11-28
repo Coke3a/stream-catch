@@ -22,6 +22,11 @@ pub trait RecordingJobRepository {
         account_id: String,
         status: RecordingStatus,
     ) -> Result<Option<RecordingEntity>>;
+    async fn find_live_account_by_platform_and_account_id(
+        &self,
+        platform: String,
+        account_id: String,
+    ) -> Result<Option<LiveAccountEntity>>;
     async fn insert(&self, insert_recording_entity: InsertRecordingEntity) -> Result<Uuid>;
     async fn update_live_end(&self, recording_id: Uuid, duration: i64) -> Result<Uuid>;
     async fn update_live_transmux_finish(

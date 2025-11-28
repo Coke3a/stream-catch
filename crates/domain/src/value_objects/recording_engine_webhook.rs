@@ -13,11 +13,11 @@ pub struct RecordingEngineLiveStartWebhook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct StartData {
-    platform: Option<String>,
-    channel: Option<String>,
-    url: Option<String>,
-    live_info: Option<LiveInfo>,
+pub struct StartData {
+    pub platform: Option<String>,
+    pub channel: Option<String>,
+    pub url: Option<String>,
+    pub live_info: Option<LiveInfo>,
 }
 
 // // Recording end webhook // no use for now
@@ -38,7 +38,6 @@ struct StartData {
 //     live_info: Option<LiveInfo>,
 // }
 
-
 // video_file_finish webhook
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordingEngineFileFinishWebhook {
@@ -50,12 +49,12 @@ pub struct RecordingEngineFileFinishWebhook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct FileFinishData {
-    platform: Option<String>,
-    channel: Option<String>,
-    path: Option<String>,
-    filesize: Option<u64>,
-    duration: Option<f64>,
+pub struct FileFinishData {
+    pub platform: Option<String>,
+    pub channel: Option<String>,
+    pub path: Option<String>,
+    pub filesize: Option<u64>,
+    pub duration: Option<f64>,
 }
 
 // video_transmux_finish webhook
@@ -65,26 +64,26 @@ pub struct RecordingEngineTransmuxFinishWebhook {
     pub ts: DateTime<Utc>,
     #[serde(rename = "type")]
     pub type_: String,
-    pub data: FileFinishData,
+    pub data: TransmuxFinishData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct TransmuxFinishData {
-    platform: Option<String>,
-    channel: Option<String>,
-    input: Option<String>,
-    output: Option<String>,
+pub struct TransmuxFinishData {
+    pub platform: Option<String>,
+    pub channel: Option<String>,
+    pub input: Option<String>,
+    pub output: Option<String>,
 }
 
 // live info
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct LiveInfo {
-    uid: Option<String>,
-    uname: Option<String>,
-    avatar: Option<String>,
-    title: Option<String>,
-    cover: Option<String>,
-    categories: Option<Vec<String>>,
-    status: Option<String>,
-    live_id: Option<String>,
+pub struct LiveInfo {
+    pub uid: Option<String>,
+    pub uname: Option<String>,
+    pub avatar: Option<String>,
+    pub title: Option<String>,
+    pub cover: Option<String>,
+    pub categories: Option<Vec<String>>,
+    pub status: Option<String>,
+    pub live_id: Option<String>,
 }
