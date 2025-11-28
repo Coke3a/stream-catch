@@ -27,8 +27,7 @@ pub async fn run() -> Result<()> {
     let supabase_storage = SupabaseStorageConfig {
         project_url: dotenvy_env.supabase.project_url.clone(),
         service_key: dotenvy_env.supabase.jwt_secret.clone(),
-        poster_bucket: std::env::var("SUPABASE_POSTER_BUCKET")
-            .unwrap_or_else(|_| "recording-posters".to_string()),
+        poster_bucket: dotenvy_env.supabase.poster_bucket.clone(),
     };
     let usecase = Arc::new(RecordingEngineWebhookUseCase::new(
         repository,
