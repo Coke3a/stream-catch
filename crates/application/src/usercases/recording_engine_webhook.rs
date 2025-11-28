@@ -1,16 +1,30 @@
-// use anyhow::Result;
+use anyhow::Result;
+use domain::{
+    entities::live_accounts::LiveAccountEntity,
+    repositories::recording_engine_webhook::RecordingJobRepository,
+    value_objects::enums::live_account_statuses::LiveAccountStatus,
+};
+use std::sync::Arc;
+use uuid::Uuid;
 
-// use domain::value_objects::recording_engine_webhook::;
+pub struct RecordingEngineWebhookUseCase {
+    repository: Arc<dyn RecordingJobRepository + Send + Sync>,
+}
 
-// pub struct RecordingEngineWebhookUseCase;
+impl RecordingEngineWebhookUseCase {
+    pub fn new(repository: Arc<dyn RecordingJobRepository + Send + Sync>) -> Self {
+        Self { repository }
+    }
 
-// impl RecordingEngineWebhookUseCase {
-//     pub fn new() -> Self {
-//         Self
-//     }
+    pub async fn get_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {
+        self.repository.find_unsynced_live_accounts().await
+    }
 
-//     pub async fn handle_webhook(&self, payload: RecordingEngineWebhook) -> Result<()> {
-//         let _payload = payload;
-//         unimplemented!()
-//     }
-// }
+    pub async fn update_live_account_status(
+        &self,
+        id: Uuid,
+        status: LiveAccountStatus,
+    ) -> Result<Uuid> {
+        self.repository.update_live_account_status(id, status).await
+    }
+}

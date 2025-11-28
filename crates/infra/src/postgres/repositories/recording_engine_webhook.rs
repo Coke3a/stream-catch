@@ -10,9 +10,14 @@ use crate::postgres::{
     schema::{live_accounts, recordings},
 };
 use domain::{
-    entities::recordings::{InsertRecordingEntity, RecordingEntity},
+    entities::{
+        live_accounts::LiveAccountEntity,
+        recordings::{InsertRecordingEntity, RecordingEntity},
+    },
     repositories::recording_engine_webhook::RecordingJobRepository,
-    value_objects::enums::recording_statuses::RecordingStatus,
+    value_objects::enums::{
+        live_account_statuses::LiveAccountStatus, recording_statuses::RecordingStatus,
+    },
 };
 
 pub struct RecordingJobPostgres {
@@ -108,6 +113,36 @@ impl RecordingJobRepository for RecordingJobPostgres {
                 recordings::updated_at.eq(now),
             ))
             .returning(recordings::id)
+            .get_result::<Uuid>(&mut conn)?;
+
+        Ok(result)
+    }
+
+    async fn find_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let result = live_accounts::table
+            .filter(live_accounts::status.eq(LiveAccountStatus::Unsynced.to_string()))
+            .select(LiveAccountEntity::as_select())
+            .load::<LiveAccountEntity>(&mut conn)?;
+
+        Ok(result)
+    }
+
+    async fn update_live_account_status(
+        &self,
+        live_account_id: Uuid,
+        status: LiveAccountStatus,
+    ) -> Result<Uuid> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+        let now = Utc::now();
+
+        let result = update(live_accounts::table.filter(live_accounts::id.eq(live_account_id)))
+            .set((
+                live_accounts::status.eq(status.to_string()),
+                live_accounts::updated_at.eq(now),
+            ))
+            .returning(live_accounts::id)
             .get_result::<Uuid>(&mut conn)?;
 
         Ok(result)

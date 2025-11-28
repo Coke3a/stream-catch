@@ -4,8 +4,13 @@ use mockall::automock;
 use uuid::Uuid;
 
 use crate::{
-    entities::recordings::{InsertRecordingEntity, RecordingEntity},
-    value_objects::enums::recording_statuses::RecordingStatus,
+    entities::{
+        live_accounts::LiveAccountEntity,
+        recordings::{InsertRecordingEntity, RecordingEntity},
+    },
+    value_objects::enums::{
+        live_account_statuses::LiveAccountStatus, recording_statuses::RecordingStatus,
+    },
 };
 
 #[async_trait]
@@ -25,4 +30,10 @@ pub trait RecordingJobRepository {
         storage_path: String,
     ) -> Result<Uuid>;
     async fn update_file_uploading(&self, recording_id: Uuid) -> Result<Uuid>;
+    async fn find_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>>;
+    async fn update_live_account_status(
+        &self,
+        live_account_id: Uuid,
+        status: LiveAccountStatus,
+    ) -> Result<Uuid>;
 }

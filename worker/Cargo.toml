@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0.93"
+tracing = "0.1.40"
+tracing-subscriber = "0.3"
+infra = { path = "../crates/infra" }
+domain = { path = "../crates/domain" }
+application = { path = "../crates/application" }
+backend = { path = "../backend" }
+uuid = { version = "1.11.0", features = ["serde", "v4"] }
