@@ -40,10 +40,10 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
         )
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
-            config.server.timeout,
+            config.backend_server.timeout,
         )))
         .layer(RequestBodyLimitLayer::new(
-            (config.server.body_limit * 1024 * 1024).try_into()?,
+            (config.backend_server.body_limit * 1024 * 1024).try_into()?,
         ))
         .layer(
             CorsLayer::new()
@@ -59,10 +59,13 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
         )
         .layer(TraceLayer::new_for_http());
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.backend_server.port));
     let listener = TcpListener::bind(addr).await?;
 
-    info!("Server is running on port {}", config.server.port);
+    info!(
+        "Server is running on port {}",
+        config.backend_server.port
+    );
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdow_signal())
         .await?;

@@ -4,7 +4,8 @@ use std::env;
 
 fn set_env_vars() {
     unsafe {
-        env::set_var("SERVER_PORT", "8080");
+        env::set_var("SERVER_PORT_BACKEND", "8080");
+        env::set_var("SERVER_PORT_WORKER", "8081");
         env::set_var("SERVER_BODY_LIMIT", "10");
         env::set_var("SERVER_TIMEOUT", "30");
         env::set_var("DATABASE_URL", "postgres://localhost:5432/db");

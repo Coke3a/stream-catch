@@ -40,7 +40,7 @@ pub async fn run() -> Result<()> {
     let worker_loop = tokio::spawn(services::worker_loop::run_worker_loop(worker_usecase));
 
     let server_usecase = Arc::clone(&usecase);
-    let server_port = dotenvy_env.server.port;
+    let server_port = dotenvy_env.worker_server.port;
     let webhook_server = tokio::spawn(async move {
         webhook_server::start_webhook_server(server_usecase, server_port).await
     });

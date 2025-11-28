@@ -9,15 +9,21 @@ use super::config_model::DotEnvyConfig;
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
 
-    let server = super::config_model::Server {
-        port: std::env::var("SERVER_PORT")
-            .expect("SERVER_PORT is invalid")
+    let backend_server = super::config_model::BackendServer {
+        port: std::env::var("SERVER_PORT_BACKEND")
+            .expect("SERVER_PORT_BACKEND is invalid")
             .parse()?,
         body_limit: std::env::var("SERVER_BODY_LIMIT")
             .expect("SERVER_BODY_LIMIT is invalid")
             .parse()?,
         timeout: std::env::var("SERVER_TIMEOUT")
             .expect("SERVER_TIMEOUT is invalid")
+            .parse()?,
+    };
+
+    let worker_server = super::config_model::WorkerServer {
+        port: std::env::var("SERVER_PORT_WORKER")
+            .expect("SERVER_PORT_WORKER is invalid")
             .parse()?,
     };
 
@@ -35,7 +41,8 @@ pub fn load() -> Result<DotEnvyConfig> {
     };
 
     Ok(DotEnvyConfig {
-        server,
+        backend_server,
+        worker_server,
         database,
         supabase,
     })

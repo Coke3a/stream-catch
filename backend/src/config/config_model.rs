@@ -1,15 +1,21 @@
 #[derive(Debug, Clone)]
 pub struct DotEnvyConfig {
-    pub server: Server,
+    pub backend_server: BackendServer,
+    pub worker_server: WorkerServer,
     pub database: Database,
     pub supabase: Supabase,
 }
 
 #[derive(Debug, Clone)]
-pub struct Server {
+pub struct BackendServer {
     pub port: u16,
     pub body_limit: u64,
     pub timeout: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkerServer {
+    pub port: u16,
 }
 
 #[derive(Debug, Clone)]
