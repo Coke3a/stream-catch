@@ -1,12 +1,7 @@
 use anyhow::Result;
-use serde_json::json;
-use thirtyfour::extensions::cdp::ChromeDevTools;
-use thirtyfour::prelude::ElementWaitable;
-use thirtyfour::{By, DesiredCapabilities, WebDriver};
-use tracing::debug;
 use tracing::error;
 use tracing_subscriber::fmt;
-use url::Url;
+use worker::services::web_driver_service;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,6 +11,9 @@ async fn main() -> Result<()> {
         error!("Worker exited with error: {}", error);
         std::process::exit(1);
     }
+
+    // let insert_urls = "https://www.bigo.tv/ma_mint2545".to_string();
+    // web_driver_service::add_account_recording_engine(insert_urls, vec![]).await;
 
     Ok(())
 }

@@ -1,14 +1,33 @@
 use anyhow::Result;
+use domain::entities::live_accounts::LiveAccountEntity;
 use serde_json::json;
+use thirtyfour::error::WebDriverResult;
 use thirtyfour::extensions::cdp::ChromeDevTools;
 use thirtyfour::prelude::ElementWaitable;
 use thirtyfour::{By, DesiredCapabilities, WebDriver};
 use url::Url;
+use tracing::debug;
 
-pub async fn add_account_recording_engine(insert_urls: String) -> Result<()> {
+pub async fn add_account_recording_engine(insert_urls: String, account_entities: Vec<LiveAccountEntity>) -> Result<()> {
     let driver = initialize_driver().await?;
     access_url(&driver).await?;
+
+    // for account in account_entities {
+    //     if check_account_is_added(&driver, &account.account_id, &account.platform).await? {
+    //         debug!("Account {} already added", account.account_id);
+    //     } else {
+    //         debug!("Account {} not added", account.account_id);
+    //     }
+    // }
+
     add_account(&driver, insert_urls).await?;
+    for account in account_entities {
+        if check_account_is_added(&driver, &account.account_id, &account.platform).await? {
+            debug!("Account {} already added", account.account_id);
+        } else {
+            debug!("Account {} not added", account.account_id);
+        }
+    }
     screenshot_debug(&driver).await?; // for debug
     driver.quit().await?;
     Ok(())
@@ -51,4 +70,19 @@ async fn add_account(driver: &WebDriver, insert_urls: String) -> Result<()> {
     add_confirm_button.click().await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     Ok(())
+}
+
+async fn check_account_is_added(driver: &WebDriver, username: &str, platform: &str) -> WebDriverResult<bool> {
+    let search_element = driver.find(By::Css("div.MuiBox-root.css-67s2z9 > div > div > div > div > input")).await?;
+    search_element.send_keys(username).await?;
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    let xpath = format!(
+        "//div[contains(@class,'virtuoso-grid-item')]
+         [.//a[.='{username}']]
+         [.//span[.='{platform}']]",
+        username = username,
+        platform = platform,
+    );
+    let cards = driver.find_all(By::XPath(&xpath)).await?;
+    Ok(!cards.is_empty())
 }

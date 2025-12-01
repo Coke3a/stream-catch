@@ -28,10 +28,11 @@ pub async fn run_worker_loop(usecase: Arc<RecordingEngineWebhookUseCase>) -> Res
 
                 info!("Found unsynced accounts. URLs:\n{}", urls);
 
-                match web_driver_service::add_account_recording_engine(urls).await {
-                    Ok(_) => info!("Successfully added accounts to Recording Engine"),
-                    Err(e) => error!("Failed to add accounts to Recording Engine: {}", e),
-                }
+                // todo: 
+                // match web_driver_service::add_account_recording_engine(urls, accounts).await {
+                //     Ok(_) => info!("Successfully added accounts to Recording Engine"),
+                //     Err(e) => error!("Failed to add accounts to Recording Engine: {}", e),
+                // }
 
                 for account in accounts {
                     info!(
