@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entities::app_users::{AppUserEntity, InsertAppUserEntity, UpdateAppUserEntity},
+    entities::app_users::{AppUserEntity, UpdateAppUserEntity},
     value_objects::enums::user_statuses::UserStatus,
 };
 

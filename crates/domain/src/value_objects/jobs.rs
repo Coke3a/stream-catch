@@ -4,7 +4,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    entities::jobs::{InsertJobEntity, JobEntity, UpdateJobEntity},
+    entities::jobs::{InsertJobEntity, UpdateJobEntity},
     value_objects::enums::{job_statuses::JobStatus, job_types::JobType},
 };
 

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::entities::follows::{FollowEntity, InsertFollowEntity};
+use crate::entities::follows::{InsertFollowEntity};
 use crate::entities::live_accounts::{InsertLiveAccountEntity, LiveAccountEntity};
 use crate::value_objects::live_following::{FindLiveAccountModel, ListFollowsFilter};
 

@@ -5,32 +5,30 @@ use thirtyfour::error::WebDriverResult;
 use thirtyfour::extensions::cdp::ChromeDevTools;
 use thirtyfour::prelude::ElementWaitable;
 use thirtyfour::{By, DesiredCapabilities, WebDriver};
+use tracing::info;
 use url::Url;
-use tracing::debug;
 
-pub async fn add_account_recording_engine(insert_urls: String, account_entities: Vec<LiveAccountEntity>) -> Result<()> {
+pub async fn add_account_recording_engine(
+    insert_urls: String,
+    account_entities: Vec<LiveAccountEntity>,
+) -> Result<(Vec<LiveAccountEntity>, Option<Vec<LiveAccountEntity>>)> {
     let driver = initialize_driver().await?;
     access_url(&driver).await?;
-
-    // for account in account_entities {
-    //     if check_account_is_added(&driver, &account.account_id, &account.platform).await? {
-    //         debug!("Account {} already added", account.account_id);
-    //     } else {
-    //         debug!("Account {} not added", account.account_id);
-    //     }
-    // }
-
     add_account(&driver, insert_urls).await?;
+    let mut added_accounts = Vec::new();
+    let mut failed_accounts = Vec::new();
     for account in account_entities {
         if check_account_is_added(&driver, &account.account_id, &account.platform).await? {
-            debug!("Account {} already added", account.account_id);
+            info!("Account {} already added", account.account_id);
+            added_accounts.push(account);
         } else {
-            debug!("Account {} not added", account.account_id);
+            info!("Account {} not added", account.account_id);
+            failed_accounts.push(account);
         }
     }
     screenshot_debug(&driver).await?; // for debug
     driver.quit().await?;
-    Ok(())
+    Ok((added_accounts, Some(failed_accounts)))
 }
 
 async fn initialize_driver() -> Result<WebDriver> {
@@ -50,7 +48,12 @@ async fn screenshot_debug(driver: &WebDriver) -> Result<()> {
 async fn access_url(driver: &WebDriver) -> Result<()> {
     let devtools = ChromeDevTools::new(driver.handle.clone());
     devtools.execute_cdp("Network.enable").await?;
-    devtools.execute_cdp_with_params("Network.setExtraHTTPHeaders", json!({"headers": {"Authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ="}})).await?;
+    devtools
+        .execute_cdp_with_params(
+            "Network.setExtraHTTPHeaders",
+            json!({"headers": {"Authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ="}}),
+        )
+        .await?;
     let url_str = format!("http://orec:5202/channels/");
     let url = Url::parse(&url_str)?;
     driver.goto(url.as_str()).await?;
@@ -61,7 +64,11 @@ async fn access_url(driver: &WebDriver) -> Result<()> {
 async fn add_account(driver: &WebDriver, insert_urls: String) -> Result<()> {
     let add_button = driver.find(By::Css("button.MuiButtonBase-root.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeSmall.MuiButton-containedSizeSmall.MuiButton-colorPrimary.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeSmall.MuiButton-containedSizeSmall.MuiButton-colorPrimary.css-1l10thz")).await?;
     add_button.click().await?;
-    let input_tag = driver.find(By::Css("div.MuiDialogContent-root.css-1nbx5hx > div > div > div")).await?;
+    let input_tag = driver
+        .find(By::Css(
+            "div.MuiDialogContent-root.css-1nbx5hx > div > div > div",
+        ))
+        .await?;
     input_tag.wait_until().clickable().await?;
     input_tag.click().await?;
     let name_input = driver.find(By::Css("textarea#url")).await?;
@@ -72,8 +79,16 @@ async fn add_account(driver: &WebDriver, insert_urls: String) -> Result<()> {
     Ok(())
 }
 
-async fn check_account_is_added(driver: &WebDriver, username: &str, platform: &str) -> WebDriverResult<bool> {
-    let search_element = driver.find(By::Css("div.MuiBox-root.css-67s2z9 > div > div > div > div > input")).await?;
+async fn check_account_is_added(
+    driver: &WebDriver,
+    username: &str,
+    platform: &str,
+) -> WebDriverResult<bool> {
+    let search_element = driver
+        .find(By::Css(
+            "div.MuiBox-root.css-67s2z9 > div > div > div > div > input",
+        ))
+        .await?;
     search_element.send_keys(username).await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     let xpath = format!(
