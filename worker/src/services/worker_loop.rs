@@ -3,6 +3,7 @@ use application::usercases::recording_engine_webhook::RecordingEngineWebhookUseC
 use domain::value_objects::enums::live_account_statuses::LiveAccountStatus;
 use std::{sync::Arc, time::Duration};
 use tracing::{error, info};
+use crate::services::web_driver_service;
 
 pub async fn run_worker_loop(usecase: Arc<RecordingEngineWebhookUseCase>) -> Result<()> {
     loop {
@@ -26,6 +27,11 @@ pub async fn run_worker_loop(usecase: Arc<RecordingEngineWebhookUseCase>) -> Res
                 }
 
                 info!("Found unsynced accounts. URLs:\n{}", urls);
+
+                match web_driver_service::add_account_recording_engine(urls).await {
+                    Ok(_) => info!("Successfully added accounts to Recording Engine"),
+                    Err(e) => error!("Failed to add accounts to Recording Engine: {}", e),
+                }
 
                 for account in accounts {
                     info!(
