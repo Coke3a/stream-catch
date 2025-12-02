@@ -14,8 +14,8 @@ use tracing::info;
 
 pub async fn run() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    .with_max_level(tracing::Level::DEBUG)
+    .init();
 
     let dotenvy_env = Arc::new(config::config_loader::load()?);
     info!("ENV has been loaded");
