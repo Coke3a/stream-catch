@@ -1,6 +1,6 @@
+pub mod auth;
 pub mod axum_http;
 pub mod config;
-pub mod auth;
 
 use std::sync::Arc;
 

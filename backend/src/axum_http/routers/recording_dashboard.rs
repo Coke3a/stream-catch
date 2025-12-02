@@ -8,8 +8,7 @@ use uuid::Uuid;
 use application::usercases::recording_dashboard::RecordingDashboardUseCase;
 use domain::repositories::recording_dashboard::RecordingDashboardRepository;
 use infra::postgres::{
-    postgres_connection::PgPoolSquad,
-    repositories::recording_dashboard::RecordingDashboardPostgres,
+    postgres_connection::PgPoolSquad, repositories::recording_dashboard::RecordingDashboardPostgres,
 };
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {

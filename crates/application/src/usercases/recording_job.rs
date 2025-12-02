@@ -6,7 +6,7 @@ use domain::{
     repositories::recording_engine_webhook::RecordingJobRepository,
     value_objects::{
         jobs::{InsertJobModel, UpdateJobModel},
-        recordings::{InsertRecordingModel},
+        recordings::InsertRecordingModel,
     },
 };
 
