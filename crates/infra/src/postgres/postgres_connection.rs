@@ -25,8 +25,6 @@ pub fn establish_connection(database_url: &str) -> Result<PgPoolSquad> {
     Ok(pool)
 }
 
-
-
 // Old version using in production
 // use anyhow::Result;
 // use diesel::{

@@ -1,6 +1,5 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use anyhow::Result;
 use application::usercases::recording_engine_webhook::RecordingEngineWebhookUseCase;
 use axum::{
     Json, Router,
@@ -13,11 +12,10 @@ use domain::value_objects::recording_engine_webhook::{
     RecordingEngineFileFinishWebhook, RecordingEngineLiveStartWebhook,
     RecordingEngineTransmuxFinishWebhook,
 };
-use tokio::net::TcpListener;
-use tracing::{error, info};
+use tracing::error;
 use uuid::Uuid;
 
-pub fn router(usecase: Arc<RecordingEngineWebhookUseCase>) -> Router {
+pub fn routes(usecase: Arc<RecordingEngineWebhookUseCase>) -> Router {
     Router::new()
         .route("/live-start", post(live_start))
         .route("/video-file-finish", post(video_file_finish))
@@ -26,21 +24,7 @@ pub fn router(usecase: Arc<RecordingEngineWebhookUseCase>) -> Router {
         .with_state(usecase)
 }
 
-pub async fn start_webhook_server(
-    usecase: Arc<RecordingEngineWebhookUseCase>,
-    port: u16,
-) -> Result<()> {
-    let app = Router::new().nest("/internal/recording-engine", router(usecase));
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = TcpListener::bind(addr).await?;
-    info!("Recording engine webhook server running on {}", addr);
-
-    axum::serve(listener, app).await?;
-    Ok(())
-}
-
-async fn live_start(
+pub async fn live_start(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineLiveStartWebhook>,
 ) -> Response {
@@ -50,7 +34,7 @@ async fn live_start(
     }
 }
 
-async fn video_file_finish(
+pub async fn video_file_finish(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineFileFinishWebhook>,
 ) -> Response {
@@ -60,7 +44,7 @@ async fn video_file_finish(
     }
 }
 
-async fn video_transmux_finish(
+pub async fn video_transmux_finish(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineTransmuxFinishWebhook>,
 ) -> Response {
@@ -70,7 +54,7 @@ async fn video_transmux_finish(
     }
 }
 
-async fn video_uploading(
+pub async fn video_uploading(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineFileFinishWebhook>,
 ) -> Response {

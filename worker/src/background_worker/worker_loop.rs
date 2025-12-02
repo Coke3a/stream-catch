@@ -1,7 +1,10 @@
-use crate::services::web_driver_service;
+use crate::background_worker::web_driver_service;
 use anyhow::Result;
 use application::usercases::recording_engine_webhook::RecordingEngineWebhookUseCase;
-use domain::{entities::live_accounts::LiveAccountEntity, value_objects::enums::live_account_statuses::LiveAccountStatus};
+use domain::{
+    entities::live_accounts::LiveAccountEntity,
+    value_objects::enums::live_account_statuses::LiveAccountStatus,
+};
 use std::{sync::Arc, time::Duration};
 use tracing::{error, info};
 
@@ -63,9 +66,15 @@ async fn update_synced_accounts(
     added_accounts: &[LiveAccountEntity],
 ) {
     for account in added_accounts {
-        info!("Updating account {} ({}) to Synced", account.id, account.canonical_url);
+        info!(
+            "Updating account {} ({}) to Synced",
+            account.id, account.canonical_url
+        );
 
-        if let Err(e) = usecase.update_live_account_status(account.id, LiveAccountStatus::Synced).await {
+        if let Err(e) = usecase
+            .update_live_account_status(account.id, LiveAccountStatus::Synced)
+            .await
+        {
             error!("Failed to update account {}: {}", account.id, e);
         } else {
             info!("Successfully updated account {} to Synced", account.id);
@@ -76,7 +85,10 @@ async fn update_synced_accounts(
 fn log_failed_accounts(failed_accounts: Option<&[LiveAccountEntity]>) {
     if let Some(accounts) = failed_accounts {
         for account in accounts {
-            error!("Failed to add account {} to Recording Engine. account_id: {}, URL: {}", account.id, account.account_id, account.canonical_url);
+            error!(
+                "Failed to add account {} to Recording Engine. account_id: {}, URL: {}",
+                account.id, account.account_id, account.canonical_url
+            );
         }
     }
 }

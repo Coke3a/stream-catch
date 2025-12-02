@@ -6,8 +6,8 @@ use axum::{
 use chrono::Utc;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use tracing::debug;
+use uuid::Uuid;
 
 use crate::config::config_loader;
 

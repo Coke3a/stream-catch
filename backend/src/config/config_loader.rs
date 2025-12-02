@@ -34,8 +34,7 @@ pub fn load() -> Result<DotEnvyConfig> {
     let supabase = super::config_model::Supabase {
         project_url: std::env::var("SUPABASE_PROJECT_URL")
             .expect("SUPABASE_PROJECT_URL is invalid"),
-        jwt_secret: std::env::var("SUPABASE_JWT_SECRET")
-            .expect("SUPABASE_JWT_SECRET is invalid"),
+        jwt_secret: std::env::var("SUPABASE_JWT_SECRET").expect("SUPABASE_JWT_SECRET is invalid"),
         poster_bucket: std::env::var("SUPABASE_POSTER_BUCKET")
             .unwrap_or_else(|_| "recording-posters".to_string()),
     };

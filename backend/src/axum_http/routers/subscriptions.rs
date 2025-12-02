@@ -1,6 +1,11 @@
 use std::sync::Arc;
 
-use axum::{Json, Router, extract::State, response::IntoResponse, routing::{get, post}};
+use axum::{
+    Json, Router,
+    extract::State,
+    response::IntoResponse,
+    routing::{get, post},
+};
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -11,8 +16,7 @@ use domain::{
     value_objects::subscriptions::InsertSubscriptionModel,
 };
 use infra::postgres::{
-    postgres_connection::PgPoolSquad,
-    repositories::subscriptions::SubscriptionPostgres,
+    postgres_connection::PgPoolSquad, repositories::subscriptions::SubscriptionPostgres,
 };
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {

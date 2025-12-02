@@ -1,4 +1,4 @@
 pub mod entities;
 pub mod repositories;
-pub mod value_objects;
 pub mod schema;
+pub mod value_objects;

@@ -1,5 +1,5 @@
-pub mod services;
-pub mod webhook_server;
+pub mod axum_http;
+pub mod background_worker;
 
 use anyhow::Result;
 use application::usercases::recording_engine_webhook::{
@@ -17,7 +17,7 @@ pub async fn run() -> Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    let dotenvy_env = config::config_loader::load()?;
+    let dotenvy_env = Arc::new(config::config_loader::load()?);
     info!("ENV has been loaded");
 
     let postgres_pool = postgres_connection::establish_connection(&dotenvy_env.database.url)?;
@@ -37,13 +37,16 @@ pub async fn run() -> Result<()> {
     info!("Worker started");
 
     let worker_usecase = Arc::clone(&usecase);
-    let worker_loop = tokio::spawn(services::worker_loop::run_worker_loop(worker_usecase));
+    let worker_loop = tokio::spawn(background_worker::worker_loop::run_worker_loop(
+        worker_usecase,
+    ));
 
+    let server_config = Arc::clone(&dotenvy_env);
     let server_usecase = Arc::clone(&usecase);
-    let server_port = dotenvy_env.worker_server.port;
-    let webhook_server = tokio::spawn(async move {
-        webhook_server::start_webhook_server(server_usecase, server_port).await
-    });
+    let webhook_server =
+        tokio::spawn(
+            async move { axum_http::http_serve::start(server_config, server_usecase).await },
+        );
 
     tokio::select! {
         result = worker_loop => result??,
