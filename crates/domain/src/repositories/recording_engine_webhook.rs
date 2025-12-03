@@ -22,6 +22,7 @@ pub trait RecordingJobRepository {
         account_id: String,
         status: RecordingStatus,
     ) -> Result<Option<RecordingEntity>>;
+    async fn find_recording_by_id(&self, recording_id: Uuid) -> Result<Option<RecordingEntity>>;
     async fn find_live_account_by_platform_and_account_id(
         &self,
         platform: String,
@@ -40,5 +41,12 @@ pub trait RecordingJobRepository {
         &self,
         live_account_id: Uuid,
         status: LiveAccountStatus,
+    ) -> Result<Uuid>;
+    async fn mark_recording_ready(
+        &self,
+        recording_id: Uuid,
+        storage_path: String,
+        size_bytes: i64,
+        duration_sec: i32,
     ) -> Result<Uuid>;
 }

@@ -19,8 +19,11 @@ use std::{str::FromStr, sync::Arc};
 use url::Url;
 use uuid::Uuid;
 
+use domain::repositories::job::JobRepository;
+
 pub struct RecordingEngineWebhookUseCase {
     repository: Arc<dyn RecordingJobRepository + Send + Sync>,
+    job_repository: Arc<dyn JobRepository + Send + Sync>,
     storage_config: SupabaseStorageConfig,
     http_client: Client,
 }
@@ -35,10 +38,12 @@ pub struct SupabaseStorageConfig {
 impl RecordingEngineWebhookUseCase {
     pub fn new(
         repository: Arc<dyn RecordingJobRepository + Send + Sync>,
+        job_repository: Arc<dyn JobRepository + Send + Sync>,
         storage_config: SupabaseStorageConfig,
     ) -> Self {
         Self {
             repository,
+            job_repository,
             storage_config,
             http_client: Client::new(),
         }
@@ -171,9 +176,18 @@ impl RecordingEngineWebhookUseCase {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
 
-        self.repository
-            .update_live_transmux_finish(recording.id, storage_path)
-            .await
+        // Update recording status to WaitingUpload and store local path
+        let updated_recording_id = self
+            .repository
+            .update_live_transmux_finish(recording.id, storage_path.clone())
+            .await?;
+
+        // Enqueue upload job
+        self.job_repository
+            .enqueue_recording_upload_job(updated_recording_id, storage_path)
+            .await?;
+
+        Ok(updated_recording_id)
     }
 
     pub async fn handle_uploading_status(

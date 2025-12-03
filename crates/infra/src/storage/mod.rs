@@ -1,1 +1,1 @@
-// Storage module placeholder
+pub mod b2;

@@ -52,6 +52,18 @@ impl RecordingJobRepository for RecordingJobPostgres {
         Ok(result)
     }
 
+    async fn find_recording_by_id(&self, recording_id: Uuid) -> Result<Option<RecordingEntity>> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let result = recordings::table
+            .find(recording_id)
+            .select(RecordingEntity::as_select())
+            .first::<RecordingEntity>(&mut conn)
+            .optional()?;
+
+        Ok(result)
+    }
+
     async fn find_live_account_by_platform_and_account_id(
         &self,
         platform: String,
@@ -159,6 +171,30 @@ impl RecordingJobRepository for RecordingJobPostgres {
                 live_accounts::updated_at.eq(now),
             ))
             .returning(live_accounts::id)
+            .get_result::<Uuid>(&mut conn)?;
+
+        Ok(result)
+    }
+
+    async fn mark_recording_ready(
+        &self,
+        recording_id: Uuid,
+        storage_path: String,
+        size_bytes: i64,
+        duration_sec: i32,
+    ) -> Result<Uuid> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+        let now = Utc::now();
+
+        let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
+            .set((
+                recordings::status.eq(RecordingStatus::Ready.to_string()),
+                recordings::storage_path.eq(Some(storage_path)),
+                recordings::size_bytes.eq(Some(size_bytes)),
+                recordings::duration_sec.eq(Some(duration_sec)),
+                recordings::updated_at.eq(now),
+            ))
+            .returning(recordings::id)
             .get_result::<Uuid>(&mut conn)?;
 
         Ok(result)
