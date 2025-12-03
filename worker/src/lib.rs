@@ -10,7 +10,7 @@ use infra::postgres::{
     postgres_connection, repositories::recording_engine_webhook::RecordingJobPostgres,
 };
 use infra::storage::b2::{B2StorageClient, B2StorageConfig};
-use std::sync::Arc;
+use std::{env, path::PathBuf, sync::Arc};
 use tracing::info;
 
 pub async fn run() -> Result<()> {
@@ -36,6 +36,10 @@ pub async fn run() -> Result<()> {
         poster_bucket: dotenvy_env.supabase.poster_bucket.clone(),
     };
 
+    let allowed_recording_base = env::var("RECORDING_LOCAL_BASE")
+        .unwrap_or_else(|_| "/var/recordings".to_string());
+    let allowed_recording_base = PathBuf::from(allowed_recording_base);
+
     // Config for StorageClient (Backblaze B2 via S3 API)
     let storage_client_config = B2StorageConfig::from_env()?;
     let storage_client = Arc::new(B2StorageClient::new(storage_client_config).await?);
@@ -44,6 +48,7 @@ pub async fn run() -> Result<()> {
         repository.clone(),
         job_repository.clone(),
         supabase_storage_config,
+        allowed_recording_base,
     ));
 
     info!("Worker started");

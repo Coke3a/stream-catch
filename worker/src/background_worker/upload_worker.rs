@@ -1,5 +1,5 @@
-use anyhow::Result;
-use std::{sync::Arc, time::Duration};
+use anyhow::{Context, Result, bail};
+use std::{env, path::PathBuf, sync::Arc, time::Duration};
 use tracing::{error, info};
 
 use application::interfaces::storage::StorageClient;
@@ -54,13 +54,16 @@ async fn process_recording_upload_job(
 ) -> Result<()> {
     let payload: RecordingUploadPayload = serde_json::from_value(job.payload.clone())?;
 
+    let local_path = validate_local_path(&payload.local_path)?;
+    let local_path_str = local_path.to_string_lossy().into_owned();
+
     let recording = recording_repo
         .find_recording_by_id(payload.recording_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("recording not found"))?;
 
     let upload_result = storage
-        .upload_recording(&payload.local_path, &recording)
+        .upload_recording(&local_path_str, &recording)
         .await?;
 
     recording_repo
@@ -75,4 +78,23 @@ async fn process_recording_upload_job(
     job_repo.mark_job_done(job.id).await?;
 
     Ok(())
+}
+
+fn validate_local_path(path: &str) -> Result<PathBuf> {
+    let base = env::var("RECORDING_LOCAL_BASE")
+        .unwrap_or_else(|_| "/var/recordings".to_string());
+    let base = PathBuf::from(base)
+        .canonicalize()
+        .context("failed to canonicalize allowed recording base")?;
+
+    let candidate = PathBuf::from(path);
+    let canonical = candidate
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize recording path: {path}"))?;
+
+    if !canonical.starts_with(&base) {
+        bail!("recording path is outside the allowed directory");
+    }
+
+    Ok(canonical)
 }

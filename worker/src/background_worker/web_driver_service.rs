@@ -26,7 +26,6 @@ pub async fn add_account_recording_engine(
             failed_accounts.push(account);
         }
     }
-    screenshot_debug(&driver).await?; // for debug
     driver.quit().await?;
     Ok((added_accounts, Some(failed_accounts)))
 }
@@ -36,13 +35,6 @@ async fn initialize_driver() -> Result<WebDriver> {
     let driver = WebDriver::new("http://localhost:4444", caps).await?;
     driver.maximize_window().await?;
     Ok(driver)
-}
-
-async fn screenshot_debug(driver: &WebDriver) -> Result<()> {
-    let png_bytes = driver.screenshot_as_png().await?;
-    tokio::fs::write("screenshot.png", &png_bytes).await?;
-    println!("Saved screenshot.png");
-    Ok(())
 }
 
 async fn access_url(driver: &WebDriver) -> Result<()> {
@@ -101,3 +93,11 @@ async fn check_account_is_added(
     let cards = driver.find_all(By::XPath(&xpath)).await?;
     Ok(!cards.is_empty())
 }
+
+// screenshot for debug
+// async fn screenshot_debug(driver: &WebDriver) -> Result<()> {
+//     let png_bytes = driver.screenshot_as_png().await?;
+//     tokio::fs::write("screenshot.png", &png_bytes).await?;
+//     println!("Saved screenshot.png");
+//     Ok(())
+// }

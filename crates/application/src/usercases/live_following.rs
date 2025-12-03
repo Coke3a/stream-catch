@@ -12,6 +12,7 @@ use domain::{
         live_following::{ListFollowsFilter, LiveAccountModel},
     },
 };
+use tracing::{debug, info, warn};
 
 pub struct LiveFollowingUseCase<T>
 where
@@ -31,8 +32,10 @@ where
     }
 
     pub async fn follow(&self, user_id: Uuid, insert_url: String) -> Result<()> {
+        info!(%user_id, url = %insert_url, "live_following: follow requested");
         let url = url::Url::parse(&insert_url)?;
         let (platform, account_id) = Self::parse_platform_and_account_id(&url)?;
+        debug!(platform = %platform, account_id, "live_following: parsed platform/account");
 
         let find_live_account_model = domain::value_objects::live_following::FindLiveAccountModel {
             platform: platform.clone(),
@@ -46,6 +49,7 @@ where
             .await
         {
             Ok(live_account) => {
+                info!(live_account_id = %live_account.id, "live_following: found existing live account");
                 // Check if already following
                 match self
                     .live_following_repository
@@ -54,8 +58,10 @@ where
                 {
                     Ok(existing_follow) => {
                         if existing_follow.status == FollowStatus::Active.to_string() {
+                            warn!(follow_status = existing_follow.status, "live_following: follow already active");
                             return Err(anyhow::anyhow!("Follow already exists"));
                         } else if existing_follow.status == FollowStatus::Inactive.to_string() {
+                            info!("live_following: reactivating existing follow");
                             self.live_following_repository
                                 .to_active(user_id, live_account.id)
                                 .await?;
@@ -63,6 +69,7 @@ where
                         }
                     }
                     Err(_) => {
+                        debug!("live_following: no existing follow found, creating");
                         // Follow doesn't exist, continue to create it
                     }
                 }
@@ -78,8 +85,10 @@ where
                 self.live_following_repository
                     .follow(insert_follow_entity)
                     .await?;
+                info!("live_following: follow created for existing live account");
             }
             Err(_) => {
+                info!(platform = %platform, account_id, "live_following: creating new live account and follow");
                 // Create live account and follow
                 let insert_live_account_entity =
                     domain::entities::live_accounts::InsertLiveAccountEntity {
@@ -89,7 +98,7 @@ where
                         status: LiveAccountStatus::Unsynced.to_string(),
                         created_at: chrono::Utc::now(),
                         updated_at: chrono::Utc::now(),
-                    };
+                };
 
                 let insert_follow_entity = domain::entities::follows::InsertFollowEntity {
                     user_id,
@@ -105,6 +114,7 @@ where
                         insert_live_account_entity,
                     )
                     .await?;
+                info!("live_following: new live account and follow created");
             }
         }
 

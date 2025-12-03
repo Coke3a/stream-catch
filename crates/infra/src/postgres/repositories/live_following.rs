@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::Utc;
 use diesel::{Connection, RunQueryDsl, insert_into};
 use diesel::{prelude::*, update};
 use std::sync::Arc;
@@ -78,7 +79,6 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
             .inner_join(live_accounts::table.on(follows::live_account_id.eq(live_accounts::id)))
             .select(LiveAccountEntity::as_select())
             .filter(follows::user_id.eq(user_id))
-            .filter(follows::status.ne(FollowStatus::Inactive.to_string()))
             .into_boxed();
 
         if let Some(live_account_id) = filter.live_account_id {
@@ -86,9 +86,9 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
         }
 
         if let Some(status) = filter.status {
-            if !matches!(status, FollowStatus::Inactive) {
-                query = query.filter(follows::status.eq(status.to_string()));
-            }
+            query = query.filter(follows::status.eq(status.to_string()));
+        } else {
+            query = query.filter(follows::status.ne(FollowStatus::Inactive.to_string()));
         }
 
         query = match filter.sort_order {
@@ -107,11 +107,15 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
 
     async fn to_active(&self, user_id: Uuid, live_account_id: Uuid) -> Result<()> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
+        let now = Utc::now();
 
         update(follows::table)
             .filter(follows::user_id.eq(user_id))
             .filter(follows::live_account_id.eq(live_account_id))
-            .set(follows::status.eq(FollowStatus::Active.to_string()))
+            .set((
+                follows::status.eq(FollowStatus::Active.to_string()),
+                follows::updated_at.eq(now),
+            ))
             .execute(&mut conn)?;
         Ok(())
     }

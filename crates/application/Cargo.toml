@@ -13,3 +13,5 @@ chrono = { version = "0.4.38", features = ["serde"] }
 reqwest = { version = "0.12.7", default-features = false, features = ["json", "rustls-tls"] }
 tracing = "0.1.40"
 mp4 = "0.14"
+futures-util = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread"] }

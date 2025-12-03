@@ -15,8 +15,8 @@ use domain::{
 };
 use mp4::Mp4Reader;
 use reqwest::{Client, header};
-use std::{fs::File, io::BufReader, path::Path, str::FromStr, sync::Arc};
-use tracing::error;
+use std::{fs::File, io::BufReader, path::{Path, PathBuf}, str::FromStr, sync::Arc, time::Duration};
+use tracing::{error, info, warn};
 use url::Url;
 use uuid::Uuid;
 
@@ -27,6 +27,7 @@ pub struct RecordingEngineWebhookUseCase {
     job_repository: Arc<dyn JobRepository + Send + Sync>,
     storage_config: SupabaseStorageConfig,
     http_client: Client,
+    allowed_recording_base: PathBuf,
 }
 
 #[derive(Clone)]
@@ -41,17 +42,24 @@ impl RecordingEngineWebhookUseCase {
         repository: Arc<dyn RecordingJobRepository + Send + Sync>,
         job_repository: Arc<dyn JobRepository + Send + Sync>,
         storage_config: SupabaseStorageConfig,
+        allowed_recording_base: PathBuf,
     ) -> Self {
         Self {
             repository,
             job_repository,
             storage_config,
-            http_client: Client::new(),
+            http_client: Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .expect("failed to build http client"),
+            allowed_recording_base,
         }
     }
 
     pub async fn get_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {
-        self.repository.find_unsynced_live_accounts().await
+        let accounts = self.repository.find_unsynced_live_accounts().await?;
+        info!(count = accounts.len(), "found unsynced live accounts");
+        Ok(accounts)
     }
 
     pub async fn update_live_account_status(
@@ -59,6 +67,7 @@ impl RecordingEngineWebhookUseCase {
         id: Uuid,
         status: LiveAccountStatus,
     ) -> Result<Uuid> {
+        info!(live_account_id = %id, %status, "updating live account status");
         self.repository.update_live_account_status(id, status).await
     }
 
@@ -66,6 +75,7 @@ impl RecordingEngineWebhookUseCase {
         &self,
         payload: RecordingEngineLiveStartWebhook,
     ) -> Result<Uuid> {
+        info!(payload_id = %payload.id, "handling live_start webhook");
         let data = payload.data;
         let platform = self.parse_platform(data.platform)?;
         let channel = data
@@ -85,6 +95,7 @@ impl RecordingEngineWebhookUseCase {
                 )
             })?;
 
+        info!(platform = %platform, channel, live_account_id = %live_account.id, "live_start: found live account");
         let live_info = data
             .live_info
             .ok_or_else(|| anyhow::anyhow!("live_info is required"))?;
@@ -102,13 +113,16 @@ impl RecordingEngineWebhookUseCase {
         };
 
         let insert_entity = insert_model.to_entity();
-        self.repository.insert(insert_entity).await
+        let recording_id = self.repository.insert(insert_entity).await?;
+        info!(%recording_id, "live_start: recording inserted");
+        Ok(recording_id)
     }
 
     pub async fn handle_transmux_finish(
         &self,
         payload: RecordingEngineTransmuxFinishWebhook,
     ) -> Result<Uuid> {
+        info!(payload_id = %payload.id, "handling video_transmux_finish webhook");
         let data = payload.data;
         let platform = self.parse_platform(data.platform)?;
         let platform_string = platform.to_string();
@@ -117,10 +131,11 @@ impl RecordingEngineWebhookUseCase {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("channel is required"))?;
 
-        let storage_path = data
+        let storage_path_raw = data
             .output
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
+        let storage_path = self.validate_local_path(&storage_path_raw)?;
 
         let recording_id = if let Some(recording) = self.repository
             .find_recording_by_live_account_and_status(
@@ -153,35 +168,41 @@ impl RecordingEngineWebhookUseCase {
                 title: None,
             };
 
-            self.repository.insert(insert_model.to_entity()).await?
+            let new_id = self.repository.insert(insert_model.to_entity()).await?;
+            info!(%new_id, "transmux_finish: inserted placeholder recording");
+            new_id
         };
 
         let duration_sec = if Self::is_mp4_path(&storage_path) {
-            match Self::read_mp4_duration_seconds(&storage_path) {
+            match Self::read_mp4_duration_seconds(storage_path.clone()).await {
                 Ok(duration) => Some(duration),
                 Err(err) => {
                     error!(
-                        "failed to read duration for mp4 output {}: {:?}",
-                        storage_path, err
+                        path = %storage_path.display(),
+                        "failed to read duration for mp4 output: {:?}",
+                        err
                     );
                     None
                 }
             }
         } else {
-            error!("transmux output is not an mp4 file: {}", storage_path);
+            warn!(path = %storage_path.display(), "transmux output is not an mp4 file");
             None
         };
 
         // Update recording status to WaitingUpload and store local path
+        let path_str = storage_path.to_string_lossy().into_owned();
         let updated_recording_id = self
             .repository
-            .update_live_transmux_finish(recording_id, storage_path.clone(), duration_sec)
+            .update_live_transmux_finish(recording_id, path_str.clone(), duration_sec)
             .await?;
 
         // Enqueue upload job
         self.job_repository
-            .enqueue_recording_upload_job(updated_recording_id, storage_path)
+            .enqueue_recording_upload_job(updated_recording_id, path_str)
             .await?;
+
+        info!(%updated_recording_id, "transmux_finish: enqueued upload job and updated recording");
 
         Ok(updated_recording_id)
     }
@@ -210,6 +231,7 @@ impl RecordingEngineWebhookUseCase {
                 )
             })?;
 
+        info!(recording_id = %recording.id, "marking recording as uploading");
         self.repository.update_file_uploading(recording.id).await
     }
 
@@ -219,22 +241,43 @@ impl RecordingEngineWebhookUseCase {
             .map_err(|_| anyhow::anyhow!("Unsupported platform: {}", platform_str))
     }
 
-    fn is_mp4_path(path: &str) -> bool {
-        Path::new(path)
-            .extension()
+    fn is_mp4_path(path: &Path) -> bool {
+        path.extension()
             .and_then(|ext| ext.to_str())
             .map(|ext| ext.eq_ignore_ascii_case("mp4"))
             .unwrap_or(false)
     }
 
-    fn read_mp4_duration_seconds<P: AsRef<Path>>(path: P) -> Result<i32> {
-        let file = File::open(&path)?;
-        let size = file.metadata()?.len();
-        let reader = BufReader::new(file);
-        let mp4 = Mp4Reader::read_header(reader, size)?;
-        let duration = mp4.duration().as_secs_f64().round() as i64;
+    async fn read_mp4_duration_seconds(path: PathBuf) -> Result<i32> {
+        tokio::task::spawn_blocking(move || {
+            let file = File::open(&path)?;
+            let size = file.metadata()?.len();
+            let reader = BufReader::new(file);
+            let mp4 = Mp4Reader::read_header(reader, size)?;
+            let duration = mp4.duration().as_secs_f64().round() as i64;
 
-        i32::try_from(duration).context("mp4 duration seconds exceed i32")
+            i32::try_from(duration).context("mp4 duration seconds exceed i32")
+        })
+        .await
+        .context("failed to join duration reader task")?
+    }
+
+    fn validate_local_path(&self, path: &str) -> Result<PathBuf> {
+        let base = self
+            .allowed_recording_base
+            .canonicalize()
+            .context("failed to canonicalize allowed recording base")?;
+
+        let candidate = PathBuf::from(path);
+        let canonical = candidate
+            .canonicalize()
+            .with_context(|| format!("failed to canonicalize recording path: {path}"))?;
+
+        if !canonical.starts_with(&base) {
+            bail!("recording path is outside the allowed directory");
+        }
+
+        Ok(canonical)
     }
 
     async fn upload_cover(&self, cover_url: &str) -> Result<String> {
@@ -311,9 +354,8 @@ impl RecordingEngineWebhookUseCase {
             );
         }
 
-        Ok(format!(
-            "{}/{}",
-            self.storage_config.poster_bucket, object_path
-        ))
+        let stored_path = format!("{}/{}", self.storage_config.poster_bucket, object_path);
+        info!(object = stored_path, "uploaded cover image to storage");
+        Ok(stored_path)
     }
 }
