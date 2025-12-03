@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    entities::follows::EditFollowEntity,
     value_objects::enums::{
         follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus,
         platforms::Platform, sort_order::SortOrder,
@@ -18,20 +17,6 @@ pub struct FollowModel {
     pub status: FollowStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateStatusFollowModel {
-    pub status: FollowStatus,
-}
-
-impl UpdateStatusFollowModel {
-    pub fn to_entity(&self) -> EditFollowEntity {
-        EditFollowEntity {
-            status: self.status.to_string(),
-            updated_at: Utc::now(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

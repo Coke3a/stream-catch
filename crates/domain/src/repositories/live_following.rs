@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::entities::follows::InsertFollowEntity;
+use crate::entities::follows::{FollowEntity, InsertFollowEntity};
 use crate::entities::live_accounts::{InsertLiveAccountEntity, LiveAccountEntity};
 use crate::value_objects::live_following::{FindLiveAccountModel, ListFollowsFilter};
 
@@ -16,7 +16,8 @@ pub trait LiveFollowingRepository {
         live_account_entry: InsertLiveAccountEntity,
     ) -> Result<Uuid>;
     async fn follow(&self, follow_entity: InsertFollowEntity) -> Result<Uuid>;
-    async fn unfollow(&self, user_id: Uuid, live_account_id: Uuid) -> Result<()>;
+    async fn to_active(&self, user_id: Uuid, recording_id: Uuid) -> Result<()>;
+    async fn find_follow(&self, user_id: Uuid, recording_id: Uuid) -> Result<FollowEntity>;
     async fn list_following_live_accounts(
         &self,
         user_id: Uuid,

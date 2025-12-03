@@ -11,7 +11,7 @@ use crate::postgres::{
 };
 use domain::{
     entities::{
-        follows::InsertFollowEntity,
+        follows::{InsertFollowEntity, FollowEntity},
         live_accounts::{InsertLiveAccountEntity, LiveAccountEntity},
     },
     repositories::live_following::LiveFollowingRepository,
@@ -105,13 +105,13 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
         Ok(results)
     }
 
-    async fn unfollow(&self, user_id: Uuid, live_account_id: Uuid) -> Result<()> {
+    async fn to_active(&self, user_id: Uuid, live_account_id: Uuid) -> Result<()> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
         update(follows::table)
             .filter(follows::user_id.eq(user_id))
             .filter(follows::live_account_id.eq(live_account_id))
-            .set(follows::status.eq(FollowStatus::Inactive.to_string()))
+            .set(follows::status.eq(FollowStatus::Active.to_string()))
             .execute(&mut conn)?;
         Ok(())
     }
@@ -126,6 +126,17 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
             .filter(live_accounts::account_id.eq(&find_live_account_model.account_id))
             .filter(live_accounts::platform.eq(find_live_account_model.platform.to_string()))
             .first::<LiveAccountEntity>(&mut conn)?;
+
+        Ok(result)
+    }
+
+    async fn find_follow(&self, user_id: Uuid, live_account_id: Uuid) -> Result<FollowEntity> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let result = follows::table
+            .filter(follows::user_id.eq(user_id))
+            .filter(follows::live_account_id.eq(live_account_id))
+            .first::<FollowEntity>(&mut conn)?;
 
         Ok(result)
     }

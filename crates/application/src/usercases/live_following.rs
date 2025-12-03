@@ -4,8 +4,13 @@ use uuid::Uuid;
 
 use domain::{
     repositories::live_following::LiveFollowingRepository,
-    value_objects::enums::platforms::Platform,
-    value_objects::live_following::{ListFollowsFilter, LiveAccountModel},
+    value_objects::{
+        enums::{
+            follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus,
+            platforms::Platform,
+        },
+        live_following::{ListFollowsFilter, LiveAccountModel},
+    },
 };
 
 pub struct LiveFollowingUseCase<T>
@@ -42,32 +47,31 @@ where
         {
             Ok(live_account) => {
                 // Check if already following
-                let follows = self
+                match self
                     .live_following_repository
-                    .list_following_live_accounts(
-                        user_id,
-                        &ListFollowsFilter {
-                            live_account_id: Some(live_account.id),
-                            platform: None,
-                            status: Some(
-                                domain::value_objects::enums::follow_statuses::FollowStatus::Active,
-                            ),
-                            limit: Some(1),
-                            sort_order: domain::value_objects::enums::sort_order::SortOrder::Desc,
-                        },
-                    )
-                    .await?;
-
-                if !follows.is_empty() {
-                    return Err(anyhow::anyhow!("Follow already exists"));
+                    .find_follow(user_id, live_account.id)
+                    .await
+                {
+                    Ok(existing_follow) => {
+                        if existing_follow.status == FollowStatus::Active.to_string() {
+                            return Err(anyhow::anyhow!("Follow already exists"));
+                        } else if existing_follow.status == FollowStatus::Inactive.to_string() {
+                            self.live_following_repository
+                                .to_active(user_id, live_account.id)
+                                .await?;
+                            return Ok(());
+                        }
+                    }
+                    Err(_) => {
+                        // Follow doesn't exist, continue to create it
+                    }
                 }
 
                 // Create follow
                 let insert_follow_entity = domain::entities::follows::InsertFollowEntity {
                     user_id,
                     live_account_id: Some(live_account.id),
-                    status: domain::value_objects::enums::follow_statuses::FollowStatus::Active
-                        .to_string(),
+                    status: FollowStatus::Active.to_string(),
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
                 };
@@ -77,20 +81,20 @@ where
             }
             Err(_) => {
                 // Create live account and follow
-                let insert_live_account_entity = domain::entities::live_accounts::InsertLiveAccountEntity {
-                    platform: platform.to_string(),
-                    account_id,
-                    canonical_url: insert_url,
-                    status: domain::value_objects::enums::live_account_statuses::LiveAccountStatus::Unsynced.to_string(),
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                };
+                let insert_live_account_entity =
+                    domain::entities::live_accounts::InsertLiveAccountEntity {
+                        platform: platform.to_string(),
+                        account_id,
+                        canonical_url: insert_url,
+                        status: LiveAccountStatus::Unsynced.to_string(),
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
+                    };
 
                 let insert_follow_entity = domain::entities::follows::InsertFollowEntity {
                     user_id,
                     live_account_id: None, // Will be set by repository
-                    status: domain::value_objects::enums::follow_statuses::FollowStatus::Active
-                        .to_string(),
+                    status: FollowStatus::Active.to_string(),
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
                 };

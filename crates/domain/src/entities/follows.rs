@@ -24,10 +24,3 @@ pub struct InsertFollowEntity {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-
-#[derive(Debug, Clone, AsChangeset, Queryable)]
-#[diesel(table_name = follows)]
-pub struct EditFollowEntity {
-    pub status: String,
-    pub updated_at: DateTime<Utc>,
-}
