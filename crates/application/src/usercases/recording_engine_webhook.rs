@@ -117,26 +117,44 @@ impl RecordingEngineWebhookUseCase {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("channel is required"))?;
 
-        let recording = self
-            .repository
+        let storage_path = data
+            .output
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
+
+        let recording_id = if let Some(recording) = self.repository
             .find_recording_by_live_account_and_status(
                 platform_string.clone(),
                 channel.clone(),
                 RecordingStatus::LiveRecording,
             )
             .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Recording not found for platform {} and channel {} in status live_recording",
-                    platform,
-                    channel
+        {
+            recording.id
+        } else {
+            let live_account = self
+                .repository
+                .find_live_account_by_platform_and_account_id(
+                    platform_string.clone(),
+                    channel.clone(),
                 )
-            })?;
+                .await?
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Live account not found for platform {} and channel {}",
+                        platform,
+                        channel
+                    )
+                })?;
 
-        let storage_path = data
-            .output
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
+            let insert_model = InsertRecordingModel {
+                live_account_id: live_account.id,
+                poster_storage_path: None,
+                title: None,
+            };
+
+            self.repository.insert(insert_model.to_entity()).await?
+        };
 
         let duration_sec = if Self::is_mp4_path(&storage_path) {
             match Self::read_mp4_duration_seconds(&storage_path) {
@@ -157,7 +175,7 @@ impl RecordingEngineWebhookUseCase {
         // Update recording status to WaitingUpload and store local path
         let updated_recording_id = self
             .repository
-            .update_live_transmux_finish(recording.id, storage_path.clone(), duration_sec)
+            .update_live_transmux_finish(recording_id, storage_path.clone(), duration_sec)
             .await?;
 
         // Enqueue upload job
