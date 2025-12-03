@@ -8,14 +8,15 @@ use domain::{
             recording_statuses::RecordingStatus,
         },
         recording_engine_webhook::{
-            RecordingEngineFileFinishWebhook, RecordingEngineLiveStartWebhook,
-            RecordingEngineTransmuxFinishWebhook,
+            RecordingEngineLiveStartWebhook, RecordingEngineTransmuxFinishWebhook,
         },
         recordings::InsertRecordingModel,
     },
 };
+use mp4::Mp4Reader;
 use reqwest::{Client, header};
-use std::{str::FromStr, sync::Arc};
+use std::{fs::File, io::BufReader, path::Path, str::FromStr, sync::Arc};
+use tracing::error;
 use url::Url;
 use uuid::Uuid;
 
@@ -104,12 +105,13 @@ impl RecordingEngineWebhookUseCase {
         self.repository.insert(insert_entity).await
     }
 
-    pub async fn handle_file_finish(
+    pub async fn handle_transmux_finish(
         &self,
-        payload: RecordingEngineFileFinishWebhook,
+        payload: RecordingEngineTransmuxFinishWebhook,
     ) -> Result<Uuid> {
         let data = payload.data;
         let platform = self.parse_platform(data.platform)?;
+        let platform_string = platform.to_string();
         let channel = data
             .channel
             .clone()
@@ -118,7 +120,7 @@ impl RecordingEngineWebhookUseCase {
         let recording = self
             .repository
             .find_recording_by_live_account_and_status(
-                platform.to_string(),
+                platform_string.clone(),
                 channel.clone(),
                 RecordingStatus::LiveRecording,
             )
@@ -131,55 +133,31 @@ impl RecordingEngineWebhookUseCase {
                 )
             })?;
 
-        let duration = data
-            .duration
-            .ok_or_else(|| anyhow::anyhow!("duration is required"))?;
-        let duration_sec = duration.round();
-        if !duration_sec.is_finite() || duration_sec < 0.0 {
-            bail!("duration should be a non-negative number");
-        }
-
-        self.repository
-            .update_live_end(recording.id, duration_sec as i64)
-            .await
-    }
-
-    pub async fn handle_transmux_finish(
-        &self,
-        payload: RecordingEngineTransmuxFinishWebhook,
-    ) -> Result<Uuid> {
-        let data = payload.data;
-        let platform = self.parse_platform(data.platform)?;
-        let channel = data
-            .channel
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("channel is required"))?;
-
-        let recording = self
-            .repository
-            .find_recording_by_live_account_and_status(
-                platform.to_string(),
-                channel.clone(),
-                RecordingStatus::LiveEnd,
-            )
-            .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Recording not found for platform {} and channel {} in status live_end",
-                    platform,
-                    channel
-                )
-            })?;
-
         let storage_path = data
             .output
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
 
+        let duration_sec = if Self::is_mp4_path(&storage_path) {
+            match Self::read_mp4_duration_seconds(&storage_path) {
+                Ok(duration) => Some(duration),
+                Err(err) => {
+                    error!(
+                        "failed to read duration for mp4 output {}: {:?}",
+                        storage_path, err
+                    );
+                    None
+                }
+            }
+        } else {
+            error!("transmux output is not an mp4 file: {}", storage_path);
+            None
+        };
+
         // Update recording status to WaitingUpload and store local path
         let updated_recording_id = self
             .repository
-            .update_live_transmux_finish(recording.id, storage_path.clone())
+            .update_live_transmux_finish(recording.id, storage_path.clone(), duration_sec)
             .await?;
 
         // Enqueue upload job
@@ -221,6 +199,24 @@ impl RecordingEngineWebhookUseCase {
         let platform_str = platform.ok_or_else(|| anyhow::anyhow!("platform is required"))?;
         Platform::from_str(&platform_str)
             .map_err(|_| anyhow::anyhow!("Unsupported platform: {}", platform_str))
+    }
+
+    fn is_mp4_path(path: &str) -> bool {
+        Path::new(path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.eq_ignore_ascii_case("mp4"))
+            .unwrap_or(false)
+    }
+
+    fn read_mp4_duration_seconds<P: AsRef<Path>>(path: P) -> Result<i32> {
+        let file = File::open(&path)?;
+        let size = file.metadata()?.len();
+        let reader = BufReader::new(file);
+        let mp4 = Mp4Reader::read_header(reader, size)?;
+        let duration = mp4.duration().as_secs_f64().round() as i64;
+
+        i32::try_from(duration).context("mp4 duration seconds exceed i32")
     }
 
     async fn upload_cover(&self, cover_url: &str) -> Result<String> {

@@ -18,7 +18,6 @@ use uuid::Uuid;
 pub fn routes(usecase: Arc<RecordingEngineWebhookUseCase>) -> Router {
     Router::new()
         .route("/live-start", post(live_start))
-        .route("/video-file-finish", post(video_file_finish))
         .route("/video-transmux-finish", post(video_transmux_finish))
         .route("/video-uploading", post(video_uploading))
         .with_state(usecase)
@@ -31,16 +30,6 @@ pub async fn live_start(
     match usecase.handle_live_start(payload).await {
         Ok(recording_id) => success_response(recording_id),
         Err(err) => map_error("live_start", err),
-    }
-}
-
-pub async fn video_file_finish(
-    State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
-    Json(payload): Json<RecordingEngineFileFinishWebhook>,
-) -> Response {
-    match usecase.handle_file_finish(payload).await {
-        Ok(recording_id) => success_response(recording_id),
-        Err(err) => map_error("video_file_finish", err),
     }
 }
 

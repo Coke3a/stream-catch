@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 use diesel::{OptionalExtension, RunQueryDsl, insert_into, prelude::*, update};
@@ -91,30 +91,11 @@ impl RecordingJobRepository for RecordingJobPostgres {
         Ok(result)
     }
 
-    async fn update_live_end(&self, recording_id: Uuid, duration: i64) -> Result<Uuid> {
-        let mut conn = Arc::clone(&self.db_pool).get()?;
-
-        let duration_i32 =
-            i32::try_from(duration).context("duration value does not fit into i32 column")?;
-        let now = Utc::now();
-
-        let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
-            .set((
-                recordings::duration_sec.eq(Some(duration_i32)),
-                recordings::ended_at.eq(Some(now)),
-                recordings::status.eq(RecordingStatus::LiveEnd.to_string()),
-                recordings::updated_at.eq(now),
-            ))
-            .returning(recordings::id)
-            .get_result::<Uuid>(&mut conn)?;
-
-        Ok(result)
-    }
-
     async fn update_live_transmux_finish(
         &self,
         recording_id: Uuid,
         storage_path: String,
+        duration_sec: Option<i32>,
     ) -> Result<Uuid> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
         let now = Utc::now();
@@ -122,6 +103,7 @@ impl RecordingJobRepository for RecordingJobPostgres {
         let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
             .set((
                 recordings::storage_path.eq(Some(storage_path)),
+                recordings::duration_sec.eq(duration_sec),
                 recordings::status.eq(RecordingStatus::WaitingUpload.to_string()),
                 recordings::updated_at.eq(now),
             ))
