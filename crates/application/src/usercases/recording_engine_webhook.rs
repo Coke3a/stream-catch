@@ -18,51 +18,38 @@ use domain::{
     },
 };
 use mp4::Mp4Reader;
-use reqwest::{Client, header};
 use std::{
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
-    time::Duration,
 };
 use tokio::process::Command;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use crate::interfaces::storage::CoverStorageClient;
 use domain::repositories::job::JobRepository;
 
 pub struct RecordingEngineWebhookUseCase {
     repository: Arc<dyn RecordingJobRepository + Send + Sync>,
     job_repository: Arc<dyn JobRepository + Send + Sync>,
-    storage_config: SupabaseStorageConfig,
-    http_client: Client,
+    cover_storage: Arc<dyn CoverStorageClient + Send + Sync>,
     allowed_recording_base: PathBuf,
-}
-
-#[derive(Clone)]
-pub struct SupabaseStorageConfig {
-    pub project_url: String,
-    pub service_key: String,
-    pub poster_bucket: String,
 }
 
 impl RecordingEngineWebhookUseCase {
     pub fn new(
         repository: Arc<dyn RecordingJobRepository + Send + Sync>,
         job_repository: Arc<dyn JobRepository + Send + Sync>,
-        storage_config: SupabaseStorageConfig,
+        cover_storage: Arc<dyn CoverStorageClient + Send + Sync>,
         allowed_recording_base: PathBuf,
     ) -> Self {
         Self {
             repository,
             job_repository,
-            storage_config,
-            http_client: Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .expect("failed to build http client"),
+            cover_storage,
             allowed_recording_base,
         }
     }
@@ -325,9 +312,9 @@ impl RecordingEngineWebhookUseCase {
             )
         })?;
 
-        let object_path = format!("recordings/{}.jpg", recording_id);
         let stored_path = self
-            .upload_cover_bytes(bytes, &object_path, "image/jpeg")
+            .cover_storage
+            .upload_cover(recording_id, bytes, "image/jpeg")
             .await?;
 
         if let Err(err) = fs::remove_file(&thumbnail_path) {
@@ -390,44 +377,4 @@ impl RecordingEngineWebhookUseCase {
         Ok(temp_thumbnail_path)
     }
 
-    async fn upload_cover_bytes(
-        &self,
-        bytes: Vec<u8>,
-        object_path: &str,
-        content_type: &str,
-    ) -> Result<String> {
-        let upload_url = format!(
-            "{}/storage/v1/object/{}/{}",
-            self.storage_config.project_url.trim_end_matches('/'),
-            self.storage_config.poster_bucket,
-            object_path
-        );
-
-        // Supabase Storage upload API: https://supabase.com/docs/guides/storage/api/upload
-        let upload_response = self
-            .http_client
-            .post(upload_url)
-            .header(
-                header::AUTHORIZATION,
-                format!("Bearer {}", self.storage_config.service_key),
-            )
-            .header("apikey", self.storage_config.service_key.clone())
-            .header("x-upsert", "true")
-            .header(header::CONTENT_TYPE, content_type)
-            .body(bytes)
-            .send()
-            .await
-            .context("failed to upload poster to supabase storage")?;
-
-        if !upload_response.status().is_success() {
-            bail!(
-                "supabase storage upload failed with status: {}",
-                upload_response.status()
-            );
-        }
-
-        let stored_path = format!("{}/{}", self.storage_config.poster_bucket, object_path);
-        info!(object = stored_path, "uploaded cover image to storage");
-        Ok(stored_path)
-    }
 }

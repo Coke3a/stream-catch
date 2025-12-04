@@ -37,6 +37,21 @@ pub fn load() -> Result<DotEnvyConfig> {
         jwt_secret: std::env::var("SUPABASE_JWT_SECRET").expect("SUPABASE_JWT_SECRET is invalid"),
         poster_bucket: std::env::var("SUPABASE_POSTER_BUCKET")
             .unwrap_or_else(|_| "recording_cover".to_string()),
+        s3_endpoint: std::env::var("SUPABASE_S3_ENDPOINT").unwrap_or_else(|_| {
+            format!(
+                "{}/storage/v1/s3",
+                std::env::var("SUPABASE_PROJECT_URL")
+                    .expect("SUPABASE_PROJECT_URL is invalid")
+                    .trim_end_matches('/')
+            )
+        }),
+        s3_region: std::env::var("SUPABASE_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+        s3_access_key: std::env::var("SUPABASE_S3_ACCESS_KEY_ID")
+            .expect("SUPABASE_S3_ACCESS_KEY_ID is invalid"),
+        s3_secret_key: std::env::var("SUPABASE_S3_SECRET_ACCESS_KEY")
+            .expect("SUPABASE_S3_SECRET_ACCESS_KEY is invalid"),
+        poster_prefix: std::env::var("SUPABASE_POSTER_PREFIX")
+            .unwrap_or_else(|_| "recordings".to_string()),
     };
 
     Ok(DotEnvyConfig {

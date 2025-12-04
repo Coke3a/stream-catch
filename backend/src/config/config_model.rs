@@ -40,4 +40,9 @@ pub struct Supabase {
     pub project_url: String,
     pub jwt_secret: String,
     pub poster_bucket: String,
+    pub s3_endpoint: String,
+    pub s3_region: String,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
+    pub poster_prefix: String,
 }

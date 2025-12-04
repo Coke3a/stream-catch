@@ -1,16 +1,14 @@
-use std::{env, path::Path, str::FromStr};
+use std::{env, path::Path};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use aws_config::BehaviorVersion;
-use aws_credential_types::Credentials;
-use aws_sdk_s3::{Client, config::Region, primitives::ByteStream};
-use http::Uri;
+use aws_sdk_s3::primitives::ByteStream;
 use mime_guess::MimeGuess;
 use tokio::fs;
 
 use application::interfaces::storage::{StorageClient, UploadResult};
 use domain::entities::recordings::RecordingEntity;
+use super::s3::{S3Config, build_s3_client};
 
 #[derive(Clone, Debug)]
 pub struct B2StorageConfig {
@@ -37,42 +35,28 @@ impl B2StorageConfig {
 }
 
 pub struct B2StorageClient {
-    client: Client,
+    client: aws_sdk_s3::Client,
     bucket: String,
     key_prefix: String,
 }
 
 impl B2StorageClient {
     pub async fn new(config: B2StorageConfig) -> Result<Self> {
-        let endpoint = config.endpoint.trim_end_matches('/').to_string();
-        // Validate endpoint early to surface misconfiguration fast
-        Uri::from_str(&endpoint).context("invalid B2 endpoint URL")?;
-
-        let credentials = Credentials::new(
-            config.key_id,
-            config.application_key,
-            None,
-            None,
-            "b2-s3-compatible",
-        );
-
-        let region = Region::new(config.region);
-        let shared_config = aws_config::defaults(BehaviorVersion::latest())
-            .region(region.clone())
-            .credentials_provider(credentials)
-            .load()
-            .await;
-
-        let s3_config = aws_sdk_s3::config::Builder::from(&shared_config)
-            .endpoint_url(endpoint)
-            .force_path_style(true)
-            .region(region)
-            .build();
+        let s3_client = build_s3_client(&S3Config {
+            endpoint: config.endpoint,
+            region: config.region,
+            access_key: config.key_id,
+            secret_key: config.application_key,
+            force_path_style: true,
+            connect_timeout_secs: 10,
+        })
+        .await
+        .context("failed to build B2 s3 client")?;
 
         let prefix = normalize_prefix(&config.key_prefix);
 
         Ok(Self {
-            client: Client::from_conf(s3_config),
+            client: s3_client,
             bucket: config.bucket,
             key_prefix: prefix,
         })

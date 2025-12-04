@@ -2,14 +2,13 @@ pub mod axum_http;
 pub mod background_worker;
 
 use anyhow::Result;
-use application::usercases::recording_engine_webhook::{
-    RecordingEngineWebhookUseCase, SupabaseStorageConfig,
-};
+use application::usercases::recording_engine_webhook::RecordingEngineWebhookUseCase;
 use backend::config;
 use infra::postgres::{
     postgres_connection, repositories::recording_engine_webhook::RecordingJobPostgres,
 };
 use infra::storage::b2::{B2StorageClient, B2StorageConfig};
+use infra::storage::supabase_storage::{SupabaseStorageClient, SupabaseStorageConfig};
 use std::{env, path::PathBuf, sync::Arc};
 use tracing::info;
 
@@ -30,11 +29,17 @@ pub async fn run() -> Result<()> {
         Arc::clone(&db_pool_arc),
     ));
 
-    let supabase_storage_config = SupabaseStorageConfig {
-        project_url: dotenvy_env.supabase.project_url.clone(),
-        service_key: dotenvy_env.supabase.jwt_secret.clone(),
-        poster_bucket: dotenvy_env.supabase.poster_bucket.clone(),
-    };
+    let cover_storage_client = Arc::new(
+        SupabaseStorageClient::new(SupabaseStorageConfig {
+            endpoint: dotenvy_env.supabase.s3_endpoint.clone(),
+            region: dotenvy_env.supabase.s3_region.clone(),
+            bucket: dotenvy_env.supabase.poster_bucket.clone(),
+            access_key: dotenvy_env.supabase.s3_access_key.clone(),
+            secret_key: dotenvy_env.supabase.s3_secret_key.clone(),
+            prefix: dotenvy_env.supabase.poster_prefix.clone(),
+        })
+        .await?,
+    );
 
     let allowed_recording_base = env::var("RECORDING_LOCAL_BASE")
         .unwrap_or_else(|_| "/var/recordings".to_string());
@@ -47,7 +52,7 @@ pub async fn run() -> Result<()> {
     let usecase = Arc::new(RecordingEngineWebhookUseCase::new(
         repository.clone(),
         job_repository.clone(),
-        supabase_storage_config,
+        cover_storage_client,
         allowed_recording_base,
     ));
 

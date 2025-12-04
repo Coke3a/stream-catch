@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use domain::entities::recordings::RecordingEntity;
 
@@ -17,4 +18,14 @@ pub trait StorageClient {
         local_path: &str,
         recording: &RecordingEntity,
     ) -> Result<UploadResult>;
+}
+
+#[async_trait]
+pub trait CoverStorageClient {
+    async fn upload_cover(
+        &self,
+        recording_id: Uuid,
+        bytes: Vec<u8>,
+        content_type: &str,
+    ) -> Result<String>;
 }
