@@ -6,13 +6,9 @@ use uuid::Uuid;
 use crate::{
     domain::entities::{
         live_accounts::LiveAccountEntity,
-        recordings::{
-            InsertRecordingEntity, RecordingEntity, RecordingTransmuxUpdateEntity,
-        },
+        recordings::{InsertRecordingEntity, RecordingEntity, RecordingTransmuxUpdateEntity},
     },
-    domain::value_objects::enums::{
-        recording_statuses::RecordingStatus,
-    },
+    domain::value_objects::enums::recording_statuses::RecordingStatus,
 };
 
 #[async_trait]

@@ -1,6 +1,10 @@
-use crate::{axum_http::{default_routers, routers::{self, subscriptions::routes}}, config::config_model::DotEnvyConfig};
-use crates::infra;
-use infra::db::postgres::postgres_connection::PgPoolSquad;
+use crate::{
+    axum_http::{
+        default_routers,
+        routers::{self, subscriptions::routes},
+    },
+    config::config_model::DotEnvyConfig,
+};
 use anyhow::Result;
 use axum::{
     Router,
@@ -10,6 +14,8 @@ use axum::{
     },
     routing::get,
 };
+use crates::infra;
+use infra::db::postgres::postgres_connection::PgPoolSquad;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tower_http::{
@@ -20,7 +26,6 @@ use tower_http::{
 };
 use tracing::info;
 
-
 pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Result<()> {
     let app = Router::new()
         .fallback(default_routers::not_found)
@@ -28,10 +33,7 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
             "/api/v1/live-following",
             routers::live_following::routes(Arc::clone(&db_pool)),
         )
-        .nest(
-            "/api/v1/subscriptions",
-            routes(Arc::clone(&db_pool)),
-        )
+        .nest("/api/v1/subscriptions", routes(Arc::clone(&db_pool)))
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
             config.backend_server.timeout,

@@ -1,8 +1,8 @@
 use crate::config::stage::Stage;
 
-use super::config_model::{WorkerServer, DotEnvyConfig, Supabase};
+use super::config_model::{Database, DotEnvyConfig, Supabase, WorkerServer};
 use anyhow::Result;
-
+use crates::infra::storages::b2::B2StorageConfig;
 
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
@@ -41,14 +41,25 @@ pub fn load() -> Result<DotEnvyConfig> {
             .unwrap_or_else(|_| "recordings".to_string()),
     };
 
-    let database = super::config_model::Database {
+    let database = Database {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
+    };
+
+    let b2_storage = B2StorageConfig {
+        endpoint: std::env::var("B2_ENDPOINT").expect("B2_ENDPOINT is invalid"),
+        region: std::env::var("B2_REGION").expect("B2_REGION is invalid"),
+        bucket: std::env::var("B2_BUCKET").expect("B2_BUCKET is invalid"),
+        key_id: std::env::var("B2_KEY_ID").expect("B2_KEY_ID is invalid"),
+        application_key: std::env::var("B2_APPLICATION_KEY")
+            .expect("B2_APPLICATION_KEY is invalid"),
+        key_prefix: std::env::var("B2_KEY_PREFIX").unwrap_or_else(|_| "recordings".to_string()),
     };
 
     Ok(DotEnvyConfig {
         worker_server,
         database,
         supabase,
+        b2_storage,
     })
 }
 

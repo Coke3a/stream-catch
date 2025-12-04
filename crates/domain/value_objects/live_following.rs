@@ -2,11 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    domain::value_objects::enums::{
-        follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus,
-        platforms::Platform, sort_order::SortOrder,
-    },
+use crate::domain::value_objects::enums::{
+    follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus, platforms::Platform,
+    sort_order::SortOrder,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

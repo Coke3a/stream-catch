@@ -1,3 +1,3 @@
+pub mod domain;
 pub mod infra;
 pub mod payments;
-pub mod domain;

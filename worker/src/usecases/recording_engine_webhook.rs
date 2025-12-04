@@ -2,15 +2,10 @@ use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use crates::domain;
 use domain::{
-    entities::{
-        recordings::RecordingTransmuxUpdateEntity,
-    },
+    entities::recordings::RecordingTransmuxUpdateEntity,
     repositories::recording_engine_webhook::RecordingEngineWebhookRepository,
     value_objects::{
-        enums::{
-            platforms::Platform,
-            recording_statuses::RecordingStatus,
-        },
+        enums::{platforms::Platform, recording_statuses::RecordingStatus},
         recording_engine_webhook::{
             RecordingEngineLiveStartWebhook, RecordingEngineTransmuxFinishWebhook,
         },
@@ -185,10 +180,7 @@ impl RecordingEngineWebhookUseCase {
 
         let updated_recording_id = self
             .repository
-            .update_live_transmux_finish(
-                recording_id,
-                changeset,
-            )
+            .update_live_transmux_finish(recording_id, changeset)
             .await?;
 
         // Enqueue upload job
@@ -361,5 +353,4 @@ impl RecordingEngineWebhookUseCase {
 
         Ok(temp_thumbnail_path)
     }
-
 }

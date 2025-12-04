@@ -3,7 +3,6 @@ use crate::config::stage::Stage;
 use super::config_model::{BackendServer, DotEnvyConfig};
 use anyhow::Result;
 
-
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
 
@@ -40,4 +39,3 @@ pub fn get_stage() -> Stage {
     let stage_str = std::env::var("STAGE").unwrap_or("".to_string());
     Stage::try_from(&stage_str).unwrap_or_default()
 }
-

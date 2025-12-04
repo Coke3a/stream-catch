@@ -3,13 +3,7 @@ use async_trait::async_trait;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::{
-    domain::entities::{
-        recordings::{
-            RecordingEntity,
-        },
-    },
-};
+use crate::domain::entities::recordings::RecordingEntity;
 
 #[async_trait]
 #[automock]

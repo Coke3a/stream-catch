@@ -3,7 +3,10 @@ use async_trait::async_trait;
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::domain::{entities::live_accounts::LiveAccountEntity, value_objects::enums::live_account_statuses::LiveAccountStatus};
+use crate::domain::{
+    entities::live_accounts::LiveAccountEntity,
+    value_objects::enums::live_account_statuses::LiveAccountStatus,
+};
 
 #[async_trait]
 #[automock]
@@ -14,4 +17,4 @@ pub trait LiveAccountRecordingEngineRepository {
         live_account_id: Uuid,
         status: LiveAccountStatus,
     ) -> Result<Uuid>;
-}   
+}

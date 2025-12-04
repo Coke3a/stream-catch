@@ -1,10 +1,19 @@
-use axum::{
-    Router, extract::{Path, State}, response::IntoResponse, routing::{get, post}
-};
-use crates::{domain::repositories::live_following::LiveFollowingRepository, infra::db::{postgres::postgres_connection::PgPoolSquad, repositories::live_following::LiveFollowingPostgres}};
-use std::sync::Arc;
 use crate::axum_http::auth::AuthUser;
 use crate::usecases::live_following::LiveFollowingUseCase;
+use axum::{
+    Router,
+    extract::{Path, State},
+    response::IntoResponse,
+    routing::{get, post},
+};
+use crates::{
+    domain::repositories::live_following::LiveFollowingRepository,
+    infra::db::{
+        postgres::postgres_connection::PgPoolSquad,
+        repositories::live_following::LiveFollowingPostgres,
+    },
+};
+use std::sync::Arc;
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let live_following_repository = LiveFollowingPostgres::new(Arc::clone(&db_pool));
@@ -14,7 +23,6 @@ pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
         .route("/:value", post(follow))
         .with_state(Arc::new(live_following_usecase))
 }
-
 
 pub async fn follow<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,

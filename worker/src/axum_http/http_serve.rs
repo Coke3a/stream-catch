@@ -1,4 +1,11 @@
-use crate::{axum_http::{default_routers, routers::{self}}, config::config_model::DotEnvyConfig, usecases::recording_engine_webhook::RecordingEngineWebhookUseCase};
+use crate::{
+    axum_http::{
+        default_routers,
+        routers::{self},
+    },
+    config::config_model::DotEnvyConfig,
+    usecases::recording_engine_webhook::RecordingEngineWebhookUseCase,
+};
 use anyhow::Result;
 use axum::{
     Router,
@@ -11,13 +18,9 @@ use axum::{
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tower_http::{
-    cors::CorsLayer,
-    limit::RequestBodyLimitLayer,
-    timeout::TimeoutLayer,
-    trace::TraceLayer,
+    cors::CorsLayer, limit::RequestBodyLimitLayer, timeout::TimeoutLayer, trace::TraceLayer,
 };
 use tracing::info;
-
 
 pub async fn start(
     config: Arc<DotEnvyConfig>,

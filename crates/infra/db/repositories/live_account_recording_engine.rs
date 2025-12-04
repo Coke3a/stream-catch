@@ -5,13 +5,15 @@ use diesel::{RunQueryDsl, prelude::*, update};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{domain, infra::db::postgres::{postgres_connection::PgPoolSquad, schema::live_accounts}};
+use crate::{
+    domain,
+    infra::db::postgres::{postgres_connection::PgPoolSquad, schema::live_accounts},
+};
 use domain::{
     entities::live_accounts::LiveAccountEntity,
     repositories::live_account_recording_engine::LiveAccountRecordingEngineRepository,
     value_objects::enums::live_account_statuses::LiveAccountStatus,
 };
-
 
 pub struct LiveAccountRecordingEnginePostgres {
     db_pool: Arc<PgPoolSquad>,
@@ -25,7 +27,6 @@ impl LiveAccountRecordingEnginePostgres {
 
 #[async_trait]
 impl LiveAccountRecordingEngineRepository for LiveAccountRecordingEnginePostgres {
-
     async fn find_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
@@ -55,6 +56,4 @@ impl LiveAccountRecordingEngineRepository for LiveAccountRecordingEnginePostgres
 
         Ok(result)
     }
-
-
 }

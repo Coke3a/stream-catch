@@ -5,7 +5,10 @@ use diesel::{OptionalExtension, RunQueryDsl, prelude::*, update};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{domain, infra::db::postgres::{postgres_connection::PgPoolSquad, schema::recordings}};
+use crate::{
+    domain,
+    infra::db::postgres::{postgres_connection::PgPoolSquad, schema::recordings},
+};
 use domain::{
     entities::recordings::RecordingEntity,
     repositories::recording_upload::RecordingUploadRepository,
@@ -24,7 +27,6 @@ impl RecordingUploadPostgres {
 
 #[async_trait]
 impl RecordingUploadRepository for RecordingUploadPostgres {
-
     async fn find_recording_by_id(&self, recording_id: Uuid) -> Result<Option<RecordingEntity>> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
@@ -37,7 +39,7 @@ impl RecordingUploadRepository for RecordingUploadPostgres {
         Ok(result)
     }
 
-        async fn mark_recording_ready(
+    async fn mark_recording_ready(
         &self,
         recording_id: Uuid,
         storage_path: String,

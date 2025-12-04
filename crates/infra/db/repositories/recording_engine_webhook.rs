@@ -5,21 +5,20 @@ use diesel::{OptionalExtension, RunQueryDsl, insert_into, prelude::*, update};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{domain, infra::db::postgres::{
-    postgres_connection::PgPoolSquad,
-    schema::{live_accounts, recordings},
-}};
+use crate::{
+    domain,
+    infra::db::postgres::{
+        postgres_connection::PgPoolSquad,
+        schema::{live_accounts, recordings},
+    },
+};
 use domain::{
     entities::{
         live_accounts::LiveAccountEntity,
-        recordings::{
-            InsertRecordingEntity, RecordingEntity, RecordingTransmuxUpdateEntity,
-        },
+        recordings::{InsertRecordingEntity, RecordingEntity, RecordingTransmuxUpdateEntity},
     },
     repositories::recording_engine_webhook::RecordingEngineWebhookRepository,
-    value_objects::enums::{
-        recording_statuses::RecordingStatus,
-    },
+    value_objects::enums::recording_statuses::RecordingStatus,
 };
 
 pub struct RecordingEngineWebhookPostgres {
@@ -109,5 +108,4 @@ impl RecordingEngineWebhookRepository for RecordingEngineWebhookPostgres {
 
         Ok(result)
     }
-
 }

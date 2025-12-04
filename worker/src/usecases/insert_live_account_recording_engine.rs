@@ -1,6 +1,10 @@
 use anyhow::Result;
 use crates::domain;
-use domain::{entities::live_accounts::LiveAccountEntity, repositories::live_account_recording_engine::LiveAccountRecordingEngineRepository, value_objects::enums::live_account_statuses::LiveAccountStatus};
+use domain::{
+    entities::live_accounts::LiveAccountEntity,
+    repositories::live_account_recording_engine::LiveAccountRecordingEngineRepository,
+    value_objects::enums::live_account_statuses::LiveAccountStatus,
+};
 use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
@@ -10,12 +14,8 @@ pub struct InsertLiveAccountUseCase {
 }
 
 impl InsertLiveAccountUseCase {
-    pub fn new(
-        repository: Arc<dyn LiveAccountRecordingEngineRepository + Send + Sync>,
-    ) -> Self {
-        Self {
-            repository,
-        }
+    pub fn new(repository: Arc<dyn LiveAccountRecordingEngineRepository + Send + Sync>) -> Self {
+        Self { repository }
     }
 
     pub async fn get_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {

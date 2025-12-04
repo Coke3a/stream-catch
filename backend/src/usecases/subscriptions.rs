@@ -1,5 +1,8 @@
 use anyhow::Result;
-use crates::domain::{repositories::subscriptions::SubscriptionRepository, value_objects::subscriptions::{InsertSubscriptionModel, PlanModel, SubscriptionModel}};
+use crates::domain::{
+    repositories::subscriptions::SubscriptionRepository,
+    value_objects::subscriptions::{InsertSubscriptionModel, PlanModel, SubscriptionModel},
+};
 use std::sync::Arc;
 use uuid::Uuid;
 

@@ -5,10 +5,13 @@ use diesel::{RunQueryDsl, insert_into, prelude::*, update};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{domain, infra::db::postgres::{
-    postgres_connection::PgPoolSquad,
-    schema::{plans, subscriptions},
-}};
+use crate::{
+    domain,
+    infra::db::postgres::{
+        postgres_connection::PgPoolSquad,
+        schema::{plans, subscriptions},
+    },
+};
 use domain::{
     entities::{plans::PlanEntity, subscriptions::InsertSubscriptionEntity},
     repositories::subscriptions::SubscriptionRepository,

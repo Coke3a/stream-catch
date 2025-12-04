@@ -1,4 +1,4 @@
-use std::{env, path::Path};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -6,7 +6,10 @@ use aws_sdk_s3::primitives::ByteStream;
 use mime_guess::MimeGuess;
 use tokio::fs;
 
-use crate::domain::{entities::recordings::RecordingEntity, repositories::storage::StorageClient, value_objects::storage::UploadResult};
+use crate::domain::{
+    entities::recordings::RecordingEntity, repositories::storage::StorageClient,
+    value_objects::storage::UploadResult,
+};
 
 use super::s3::{S3Config, build_s3_client};
 
@@ -18,20 +21,6 @@ pub struct B2StorageConfig {
     pub key_id: String,
     pub application_key: String,
     pub key_prefix: String,
-}
-
-impl B2StorageConfig {
-    pub fn from_env() -> Result<Self> {
-        Ok(Self {
-            endpoint: env::var("B2_ENDPOINT").context("B2_ENDPOINT is required")?,
-            region: env::var("B2_REGION").context("B2_REGION is required")?,
-            bucket: env::var("B2_BUCKET").context("B2_BUCKET is required")?,
-            key_id: env::var("B2_KEY_ID").context("B2_KEY_ID is required")?,
-            application_key: env::var("B2_APPLICATION_KEY")
-                .context("B2_APPLICATION_KEY is required")?,
-            key_prefix: env::var("B2_KEY_PREFIX").unwrap_or_else(|_| "recordings".to_string()),
-        })
-    }
 }
 
 pub struct B2StorageClient {

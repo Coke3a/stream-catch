@@ -13,7 +13,7 @@ use crate::infra::db::postgres::{
 };
 use domain::{
     entities::{
-        follows::{InsertFollowEntity, FollowEntity},
+        follows::{FollowEntity, InsertFollowEntity},
         live_accounts::{InsertLiveAccountEntity, LiveAccountEntity},
     },
     repositories::live_following::LiveFollowingRepository,

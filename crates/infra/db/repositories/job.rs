@@ -5,7 +5,10 @@ use diesel::prelude::*;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{domain, infra::db::postgres::{postgres_connection::PgPoolSquad, schema::jobs}};
+use crate::{
+    domain,
+    infra::db::postgres::{postgres_connection::PgPoolSquad, schema::jobs},
+};
 use domain::{
     entities::jobs::{InsertJobEntity, JobEntity},
     repositories::job::JobRepository,

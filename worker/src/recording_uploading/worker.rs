@@ -1,5 +1,12 @@
 use anyhow::{Context, Result, bail};
-use crates::domain::{self, entities::jobs::JobEntity, repositories::{job::JobRepository, recording_upload::RecordingUploadRepository, storage::StorageClient}, value_objects::recording_upload::RecordingUploadPayload};
+use crates::domain::{
+    self,
+    entities::jobs::JobEntity,
+    repositories::{
+        job::JobRepository, recording_upload::RecordingUploadRepository, storage::StorageClient,
+    },
+    value_objects::recording_upload::RecordingUploadPayload,
+};
 use std::{env, path::PathBuf, sync::Arc, time::Duration};
 use tracing::{error, info};
 
@@ -75,8 +82,7 @@ async fn process_recording_upload_job(
 }
 
 fn validate_local_path(path: &str) -> Result<PathBuf> {
-    let base = env::var("RECORDING_LOCAL_BASE")
-        .unwrap_or_else(|_| "/var/recordings".to_string());
+    let base = env::var("RECORDING_LOCAL_BASE").unwrap_or_else(|_| "/var/recordings".to_string());
     let base = PathBuf::from(base)
         .canonicalize()
         .context("failed to canonicalize allowed recording base")?;

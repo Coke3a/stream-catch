@@ -4,10 +4,13 @@ use diesel::{RunQueryDsl, prelude::*};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{domain, infra::db::postgres::{
-    postgres_connection::PgPoolSquad,
-    schema::{follows, live_accounts, recordings},
-}};
+use crate::{
+    domain,
+    infra::db::postgres::{
+        postgres_connection::PgPoolSquad,
+        schema::{follows, live_accounts, recordings},
+    },
+};
 use domain::{
     entities::recordings::RecordingEntity,
     repositories::recording_dashboard::RecordingDashboardRepository,

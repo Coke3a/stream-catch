@@ -1,8 +1,8 @@
+use crate::domain::entities::recordings::RecordingEntity;
+use crate::domain::value_objects::storage::UploadResult;
 use anyhow::Result;
 use async_trait::async_trait;
 use uuid::Uuid;
-use crate::domain::entities::recordings::RecordingEntity;
-use crate::domain::value_objects::storage::UploadResult;
 
 #[async_trait]
 pub trait StorageClient {

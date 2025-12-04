@@ -1,3 +1,4 @@
+use crate::domain::entities::live_accounts::LiveAccountEntity;
 use anyhow::Result;
 use serde_json::json;
 use thirtyfour::error::WebDriverResult;
@@ -6,7 +7,6 @@ use thirtyfour::prelude::ElementWaitable;
 use thirtyfour::{By, DesiredCapabilities, WebDriver};
 use tracing::info;
 use url::Url;
-use crate::domain::entities::live_accounts::LiveAccountEntity;
 
 pub async fn add_account_recording_engine(
     insert_urls: String,
