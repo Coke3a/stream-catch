@@ -1,29 +1,20 @@
-use std::sync::Arc;
-
 use axum::{
-    Extension, Json, Router,
-    extract::{Path, Query, State},
-    response::IntoResponse,
-    routing::{delete, get, post},
+    Router, extract::{Path, State}, response::IntoResponse, routing::{get, post}
 };
-use uuid::Uuid;
-
-use crate::auth::AuthUser;
-use application::usercases::live_following::LiveFollowingUseCase;
-use domain::repositories::live_following::LiveFollowingRepository;
-use infra::postgres::{
-    postgres_connection::PgPoolSquad, repositories::live_following::LiveFollowingPostgres,
-};
+use crates::{domain::repositories::live_following::LiveFollowingRepository, infra::db::{postgres::postgres_connection::PgPoolSquad, repositories::live_following::LiveFollowingPostgres}};
+use std::sync::Arc;
+use crate::axum_http::auth::AuthUser;
+use crate::usecases::live_following::LiveFollowingUseCase;
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let live_following_repository = LiveFollowingPostgres::new(Arc::clone(&db_pool));
     let live_following_usecase = LiveFollowingUseCase::new(Arc::new(live_following_repository));
 
     Router::new()
-        .route("/", get(list))
-        .route("/:value", post(follow).delete(unfollow))
+        .route("/:value", post(follow))
         .with_state(Arc::new(live_following_usecase))
 }
+
 
 pub async fn follow<T>(
     State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
@@ -72,29 +63,4 @@ where
             }
         }
     }
-}
-
-pub async fn unfollow<T>(
-    State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
-    auth: AuthUser,
-    Path(follow_id): Path<Uuid>,
-) -> impl IntoResponse
-where
-    T: LiveFollowingRepository + Send + Sync,
-{
-    // find follow by user_id and follow_id
-    // If the update time is less than 1 day
-    // -	return a failed response
-    // else set follow status to Inactive
-}
-
-pub async fn list<T>(
-    State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
-    auth: AuthUser,
-) -> impl IntoResponse
-where
-    T: LiveFollowingRepository + Send + Sync,
-{
-    // get (join recording with follow) by user_id
-    // response
 }

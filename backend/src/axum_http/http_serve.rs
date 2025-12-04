@@ -1,7 +1,6 @@
-use crate::{
-    axum_http::{default_routers, routers},
-    config::config_model::DotEnvyConfig,
-};
+use crate::{axum_http::{default_routers, routers::{self, subscriptions::routes}}, config::config_model::DotEnvyConfig};
+use crates::infra;
+use infra::db::postgres::postgres_connection::PgPoolSquad;
 use anyhow::Result;
 use axum::{
     Router,
@@ -21,7 +20,6 @@ use tower_http::{
 };
 use tracing::info;
 
-use infra::postgres::postgres_connection::PgPoolSquad;
 
 pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Result<()> {
     let app = Router::new()
@@ -31,12 +29,8 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
             routers::live_following::routes(Arc::clone(&db_pool)),
         )
         .nest(
-            "/api/v1/recording-dashboard",
-            routers::recording_dashboard::routes(Arc::clone(&db_pool)),
-        )
-        .nest(
             "/api/v1/subscriptions",
-            routers::subscriptions::routes(Arc::clone(&db_pool)),
+            routes(Arc::clone(&db_pool)),
         )
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(

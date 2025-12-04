@@ -1,0 +1,27 @@
+[package]
+name = "crates"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.132"
+uuid = { version = "1.11.0", features = ["serde", "v4"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+async-trait = "0.1.83"
+mockall = "0.14.0"
+anyhow = "1.0.93"
+thirtyfour = "0.36.1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1.40"
+url = "2.5.0"
+diesel = { version = "2.2.4", features = ["postgres", "serde_json", "chrono", "uuid", "r2d2"] }
+aws-config = { version = "1.8.11", features = ["behavior-version-latest"] }
+aws-credential-types = "1.2.10"
+aws-sdk-s3 = "1.116.0"
+http = "1.1.0"
+mime_guess = "2.0.5"
+
+
+[lib]
+path = "lib.rs"

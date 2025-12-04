@@ -1,15 +1,13 @@
-use crate::config::{
-    config_model::{AdminSecret, UserSecret},
-    stage::Stage,
-};
-use anyhow::{Ok, Result};
+use crate::config::stage::Stage;
 
-use super::config_model::DotEnvyConfig;
+use super::config_model::{BackendServer, DotEnvyConfig};
+use anyhow::Result;
+
 
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
 
-    let backend_server = super::config_model::BackendServer {
+    let backend_server = BackendServer {
         port: std::env::var("SERVER_PORT_BACKEND")
             .expect("SERVER_PORT_BACKEND is invalid")
             .parse()?,
@@ -21,42 +19,16 @@ pub fn load() -> Result<DotEnvyConfig> {
             .parse()?,
     };
 
-    let worker_server = super::config_model::WorkerServer {
-        port: std::env::var("SERVER_PORT_WORKER")
-            .expect("SERVER_PORT_WORKER is invalid")
-            .parse()?,
+    let supabase = super::config_model::Supabase {
+        jwt_secret: std::env::var("SUPABASE_JWT_SECRET").expect("SUPABASE_JWT_SECRET is invalid"),
     };
 
     let database = super::config_model::Database {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
     };
 
-    let supabase = super::config_model::Supabase {
-        project_url: std::env::var("SUPABASE_PROJECT_URL")
-            .expect("SUPABASE_PROJECT_URL is invalid"),
-        jwt_secret: std::env::var("SUPABASE_JWT_SECRET").expect("SUPABASE_JWT_SECRET is invalid"),
-        poster_bucket: std::env::var("SUPABASE_POSTER_BUCKET")
-            .unwrap_or_else(|_| "recording_cover".to_string()),
-        s3_endpoint: std::env::var("SUPABASE_S3_ENDPOINT").unwrap_or_else(|_| {
-            format!(
-                "{}/storage/v1/s3",
-                std::env::var("SUPABASE_PROJECT_URL")
-                    .expect("SUPABASE_PROJECT_URL is invalid")
-                    .trim_end_matches('/')
-            )
-        }),
-        s3_region: std::env::var("SUPABASE_S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-        s3_access_key: std::env::var("SUPABASE_S3_ACCESS_KEY_ID")
-            .expect("SUPABASE_S3_ACCESS_KEY_ID is invalid"),
-        s3_secret_key: std::env::var("SUPABASE_S3_SECRET_ACCESS_KEY")
-            .expect("SUPABASE_S3_SECRET_ACCESS_KEY is invalid"),
-        poster_prefix: std::env::var("SUPABASE_POSTER_PREFIX")
-            .unwrap_or_else(|_| "recordings".to_string()),
-    };
-
     Ok(DotEnvyConfig {
         backend_server,
-        worker_server,
         database,
         supabase,
     })
@@ -69,22 +41,3 @@ pub fn get_stage() -> Stage {
     Stage::try_from(&stage_str).unwrap_or_default()
 }
 
-pub fn get_user_secret() -> Result<UserSecret> {
-    dotenvy::dotenv().ok();
-
-    Ok(UserSecret {
-        secret: std::env::var("JWT_USER_SECRET").expect("JWT_USER_SECRET is invalid"),
-        refresh_secret: std::env::var("JWT_USER_REFRESH_SECRET")
-            .expect("JWT_USER_REFRESH_SECRET is invalid"),
-    })
-}
-
-pub fn get_admin_secret() -> Result<AdminSecret> {
-    dotenvy::dotenv().ok();
-
-    Ok(AdminSecret {
-        secret: std::env::var("JWT_ADMIN_SECRET").expect("JWT_ADMIN_SECRET is invalid"),
-        refresh_secret: std::env::var("JWT_ADMIN_REFRESH_SECRET")
-            .expect("JWT_ADMIN_REFRESH_SECRET is invalid"),
-    })
-}

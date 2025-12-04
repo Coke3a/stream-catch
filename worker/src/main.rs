@@ -1,5 +1,10 @@
 use anyhow::Result;
+use crates::infra::{db::{postgres::postgres_connection::{self, PgPoolSquad}, repositories::{job::JobPostgres, live_account_recording_engine::LiveAccountRecordingEnginePostgres, recording_engine_webhook::RecordingEngineWebhookPostgres, recording_upload::RecordingUploadPostgres}}, storages::{b2::{B2StorageClient, B2StorageConfig}, supabase_storage::{SupabaseStorageClient, SupabaseStorageConfig}}};
+use tokio::task::JoinHandle;
 use tracing::error;
+use worker::{axum_http, config::{self, config_model::DotEnvyConfig}, recording_engine_web_driver::{self}, recording_uploading, usecases::{insert_live_account_recording_engine::{self, InsertLiveAccountUseCase}, recording_engine_webhook::RecordingEngineWebhookUseCase}};
+use std::{env, path::PathBuf, sync::Arc};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -7,5 +12,97 @@ async fn main() -> Result<()> {
         error!("Worker exited with error: {}", error);
         std::process::exit(1);
     }
+    Ok(())
+}
+
+
+async fn run() -> Result<()> {
+
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
+    let dotenvy_env = Arc::new(config::config_loader::load()?);
+    info!("ENV has been loaded");
+
+    let postgres_pool = postgres_connection::establish_connection(&dotenvy_env.database.url)?;
+    info!("Postgres connection has been established");
+
+    let db_pool_arc = Arc::new(postgres_pool);
+    
+    // Create repository (shared DB pool)
+    let repo = Arc::new(LiveAccountRecordingEnginePostgres::new(Arc::clone(&db_pool_arc)));
+
+    // Create usecase that depends on the repo
+    let insert_live_account_usecase =
+        Arc::new(InsertLiveAccountUseCase::new(repo));
+
+    // Spawn background loop
+    let recording_engine_web_driver_loop =
+        tokio::spawn(recording_engine_web_driver::worker::run(insert_live_account_usecase));
+
+
+    // init recording_engine_webhook
+    let supa = &dotenvy_env.supabase;
+    let cover_storage_client = Arc::new(
+        SupabaseStorageClient::new(SupabaseStorageConfig {
+            endpoint:    supa.s3_endpoint.clone(),
+            region:      supa.s3_region.clone(),
+            bucket:      supa.poster_bucket.clone(),
+            access_key:  supa.s3_access_key.clone(),
+            secret_key:  supa.s3_secret_key.clone(),
+            prefix:      supa.poster_prefix.clone(),
+        })
+        .await?,
+    );
+
+    let allowed_recording_base: PathBuf = env::var("RECORDING_LOCAL_BASE")
+        .unwrap_or_else(|_| "/var/recordings".to_string())
+        .into();
+
+    let recording_engine_webhook_repository =
+        Arc::new(RecordingEngineWebhookPostgres::new(Arc::clone(&db_pool_arc)));
+
+    let job_repository =
+        Arc::new(JobPostgres::new(Arc::clone(&db_pool_arc)));
+
+    let recording_engine_webhook_usecase = Arc::new(RecordingEngineWebhookUseCase::new(
+        recording_engine_webhook_repository,
+        job_repository,
+        cover_storage_client,
+        allowed_recording_base,
+    ));
+
+    let server_config = dotenvy_env;
+    let server_usecase = recording_engine_webhook_usecase;
+
+    let recording_engine_webhook = tokio::spawn(async move {
+        axum_http::http_serve::start(server_config, server_usecase).await
+    });
+
+
+
+    let recording_upload_repository = Arc::new(RecordingUploadPostgres::new(Arc::clone(&db_pool_arc)));
+
+    let video_storage_client_config = B2StorageConfig::from_env()?;
+    let video_storage_client = Arc::new(B2StorageClient::new(video_storage_client_config).await?);
+
+
+    // Spawn background loop
+    let recording_uploading_loop =
+        tokio::spawn(recording_uploading::worker::run(
+            Arc::clone(&job_repository),
+            Arc::clone(&recording_upload_repository),
+            Arc::clone(&video_storage_client),
+        ));
+
+
+
+
+    tokio::select! {
+        result = recording_uploading_loop => result??,
+        result = recording_engine_web_driver_loop => result??,
+        result = recording_engine_webhook => result??,
+    };
     Ok(())
 }

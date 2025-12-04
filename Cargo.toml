@@ -3,7 +3,5 @@ resolver = "2"
 members = [
   "backend",
   "worker",
-  "crates/domain",
-  "crates/application",
-  "crates/infra",
+  "crates",
 ]

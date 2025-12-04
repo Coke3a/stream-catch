@@ -1,23 +1,10 @@
-use std::sync::Arc;
-
 use axum::{
-    Json, Router,
-    extract::State,
-    response::IntoResponse,
-    routing::{get, post},
+    Json, Router, extract::{Path, State}, response::IntoResponse, routing::{get, post}
 };
-use uuid::Uuid;
-
-use crate::auth::AuthUser;
-
-use application::usercases::subscriptions::SubscriptionUseCase;
-use domain::{
-    repositories::subscriptions::SubscriptionRepository,
-    value_objects::subscriptions::InsertSubscriptionModel,
-};
-use infra::postgres::{
-    postgres_connection::PgPoolSquad, repositories::subscriptions::SubscriptionPostgres,
-};
+use crates::{domain::{repositories::subscriptions::SubscriptionRepository, value_objects::subscriptions::InsertSubscriptionModel}, infra::db::{postgres::postgres_connection::PgPoolSquad, repositories::subscriptions::SubscriptionPostgres}};
+use std::sync::Arc;
+use crate::axum_http::auth::AuthUser;
+use crate::usecases::subscriptions::SubscriptionUseCase;
 
 pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
     let subscriptions_repository = SubscriptionPostgres::new(Arc::clone(&db_pool));
