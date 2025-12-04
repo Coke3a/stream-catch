@@ -12,7 +12,9 @@ use crate::postgres::{
 use domain::{
     entities::{
         live_accounts::LiveAccountEntity,
-        recordings::{InsertRecordingEntity, RecordingEntity},
+        recordings::{
+            InsertRecordingEntity, RecordingEntity, RecordingTransmuxUpdateEntity,
+        },
     },
     repositories::recording_engine_webhook::RecordingJobRepository,
     value_objects::enums::{
@@ -94,19 +96,11 @@ impl RecordingJobRepository for RecordingJobPostgres {
     async fn update_live_transmux_finish(
         &self,
         recording_id: Uuid,
-        storage_path: String,
-        duration_sec: Option<i32>,
+        changeset: RecordingTransmuxUpdateEntity,
     ) -> Result<Uuid> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
-        let now = Utc::now();
-
         let result = update(recordings::table.filter(recordings::id.eq(recording_id)))
-            .set((
-                recordings::storage_path.eq(Some(storage_path)),
-                recordings::duration_sec.eq(duration_sec),
-                recordings::status.eq(RecordingStatus::WaitingUpload.to_string()),
-                recordings::updated_at.eq(now),
-            ))
+            .set(changeset)
             .returning(recordings::id)
             .get_result::<Uuid>(&mut conn)?;
 

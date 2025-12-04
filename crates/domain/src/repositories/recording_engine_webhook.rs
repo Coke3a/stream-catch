@@ -6,7 +6,9 @@ use uuid::Uuid;
 use crate::{
     entities::{
         live_accounts::LiveAccountEntity,
-        recordings::{InsertRecordingEntity, RecordingEntity},
+        recordings::{
+            InsertRecordingEntity, RecordingEntity, RecordingTransmuxUpdateEntity,
+        },
     },
     value_objects::enums::{
         live_account_statuses::LiveAccountStatus, recording_statuses::RecordingStatus,
@@ -32,8 +34,7 @@ pub trait RecordingJobRepository {
     async fn update_live_transmux_finish(
         &self,
         recording_id: Uuid,
-        storage_path: String,
-        duration_sec: Option<i32>,
+        changeset: RecordingTransmuxUpdateEntity,
     ) -> Result<Uuid>;
     async fn update_file_uploading(&self, recording_id: Uuid) -> Result<Uuid>;
     async fn find_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>>;
