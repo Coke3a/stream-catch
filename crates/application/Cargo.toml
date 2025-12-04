@@ -14,4 +14,4 @@ reqwest = { version = "0.12.7", default-features = false, features = ["json", "r
 tracing = "0.1.40"
 mp4 = "0.14"
 futures-util = "0.3"
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread", "process"] }

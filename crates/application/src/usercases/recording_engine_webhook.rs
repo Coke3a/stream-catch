@@ -27,6 +27,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tokio::process::Command;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -142,10 +143,6 @@ impl RecordingEngineWebhookUseCase {
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
         let storage_path = self.validate_local_path(&storage_path_raw)?;
 
-        let poster_storage_path = self
-            .find_and_upload_cover_from_output(&storage_path)
-            .await?;
-
         let recording_id = if let Some(recording) = self
             .repository
             .find_recording_by_live_account_and_status(
@@ -200,6 +197,10 @@ impl RecordingEngineWebhookUseCase {
             None
         };
 
+        let poster_storage_path = self
+            .generate_and_upload_cover_from_video(recording_id, &storage_path)
+            .await?;
+
         // Update recording status to WaitingUpload and store local path
         let path_str = storage_path.to_string_lossy().into_owned();
         let changeset = RecordingTransmuxUpdateEntity {
@@ -207,7 +208,7 @@ impl RecordingEngineWebhookUseCase {
             duration_sec,
             status: RecordingStatus::WaitingUpload.to_string(),
             updated_at: Utc::now(),
-            poster_storage_path: poster_storage_path.map(Some),
+            poster_storage_path: Some(Some(poster_storage_path)),
         };
 
         let updated_recording_id = self
@@ -301,61 +302,100 @@ impl RecordingEngineWebhookUseCase {
         Ok(canonical)
     }
 
-    async fn find_and_upload_cover_from_output(
+    async fn generate_and_upload_cover_from_video(
+        &self,
+        recording_id: Uuid,
+        video_output_path: &Path,
+    ) -> Result<String> {
+        if !video_output_path.exists() {
+            bail!(
+                "transmux output path does not exist: {}",
+                video_output_path.display()
+            );
+        }
+
+        let thumbnail_path = self
+            .generate_thumbnail_image(video_output_path, recording_id)
+            .await?;
+
+        let bytes = fs::read(&thumbnail_path).with_context(|| {
+            format!(
+                "failed to read generated thumbnail: {}",
+                thumbnail_path.display()
+            )
+        })?;
+
+        let object_path = format!("recordings/{}.jpg", recording_id);
+        let stored_path = self
+            .upload_cover_bytes(bytes, &object_path, "image/jpeg")
+            .await?;
+
+        if let Err(err) = fs::remove_file(&thumbnail_path) {
+            warn!(
+                path = %thumbnail_path.display(),
+                "failed to remove temporary thumbnail file: {err:?}"
+            );
+        }
+
+        Ok(stored_path)
+    }
+
+    async fn generate_thumbnail_image(
         &self,
         video_output_path: &Path,
-    ) -> Result<Option<String>> {
-        if !video_output_path.exists() {
-            warn!(path = %video_output_path.display(), "transmux output path does not exist");
-            return Ok(None);
+        recording_id: Uuid,
+    ) -> Result<PathBuf> {
+        let temp_thumbnail_path = std::env::temp_dir().join(format!(
+            "recording-thumb-{}-{}.jpg",
+            recording_id,
+            Uuid::new_v4()
+        ));
+
+        let output = Command::new("ffmpeg")
+            .arg("-y")
+            .arg("-ss")
+            .arg("00:00:02")
+            .arg("-i")
+            .arg(video_output_path)
+            .arg("-vframes")
+            .arg("1")
+            .arg("-vf")
+            .arg("scale=640:-1")
+            .arg("-q:v")
+            .arg("3")
+            .arg(&temp_thumbnail_path)
+            .output()
+            .await
+            .context("failed to run ffmpeg for thumbnail generation")?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            error!(
+                recording_id = %recording_id,
+                video = %video_output_path.display(),
+                status = %output.status,
+                stderr = %stderr,
+                "ffmpeg thumbnail generation failed"
+            );
+            bail!("ffmpeg thumbnail generation failed");
         }
 
-        let candidate = self.find_existing_cover_path(video_output_path).await?;
-        let Some(cover_path) = candidate else {
-            return Ok(None);
-        };
+        info!(
+            recording_id = %recording_id,
+            video = %video_output_path.display(),
+            thumbnail = %temp_thumbnail_path.display(),
+            "generated thumbnail from recording"
+        );
 
-        let stored_path = self.upload_cover_from_file(&cover_path).await?;
-        Ok(Some(stored_path))
+        Ok(temp_thumbnail_path)
     }
 
-    async fn find_existing_cover_path(&self, video_output_path: &Path) -> Result<Option<PathBuf>> {
-        let extensions = ["jpg", "jpeg", "png", "webp"];
-        for ext in extensions {
-            let candidate = video_output_path.with_extension(ext);
-            if candidate.exists() {
-                let canonical = self.validate_local_path(&candidate.to_string_lossy())?;
-                return Ok(Some(canonical));
-            }
-        }
-
-        Ok(None)
-    }
-
-    async fn upload_cover_from_file(&self, cover_path: &Path) -> Result<String> {
-        let bytes = fs::read(cover_path)
-            .with_context(|| format!("failed to read cover file: {}", cover_path.display()))?;
-
-        let content_type = cover_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| match ext.to_ascii_lowercase().as_str() {
-                "jpg" | "jpeg" => "image/jpeg",
-                "png" => "image/png",
-                "webp" => "image/webp",
-                _ => "application/octet-stream",
-            })
-            .unwrap_or("application/octet-stream");
-
-        let extension = cover_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .filter(|ext| !ext.is_empty())
-            .unwrap_or("jpg");
-
-        let object_name = format!("poster-{}.{}", Uuid::new_v4(), extension);
-        let object_path = format!("recordings/{}", object_name);
-
+    async fn upload_cover_bytes(
+        &self,
+        bytes: Vec<u8>,
+        object_path: &str,
+        content_type: &str,
+    ) -> Result<String> {
         let upload_url = format!(
             "{}/storage/v1/object/{}/{}",
             self.storage_config.project_url.trim_end_matches('/'),
