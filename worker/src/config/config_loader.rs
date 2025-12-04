@@ -11,11 +11,11 @@ pub fn load() -> Result<DotEnvyConfig> {
         port: std::env::var("SERVER_PORT_WORKER")
             .expect("SERVER_PORT_WORKER is invalid")
             .parse()?,
-        body_limit: std::env::var("SERVER_BODY_LIMIT_WORKER")
-            .expect("SERVER_BODY_LIMIT_WORKER is invalid")
+        body_limit: std::env::var("SERVER_BODY_LIMIT")
+            .expect("SERVER_BODY_LIMIT is invalid")
             .parse()?,
-        timeout: std::env::var("SERVER_TIMEOUT_WORKER")
-            .expect("SERVER_TIMEOUT_WORKER is invalid")
+        timeout: std::env::var("SERVER_TIMEOUT")
+            .expect("SERVER_TIMEOUT is invalid")
             .parse()?,
     };
 
