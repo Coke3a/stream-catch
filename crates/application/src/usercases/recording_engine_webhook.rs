@@ -1,6 +1,10 @@
 use anyhow::{Context, Result, bail};
+use chrono::Utc;
 use domain::{
-    entities::live_accounts::LiveAccountEntity,
+    entities::{
+        live_accounts::LiveAccountEntity,
+        recordings::RecordingTransmuxUpdateEntity,
+    },
     repositories::recording_engine_webhook::RecordingJobRepository,
     value_objects::{
         enums::{
@@ -15,9 +19,15 @@ use domain::{
 };
 use mp4::Mp4Reader;
 use reqwest::{Client, header};
-use std::{fs::File, io::BufReader, path::{Path, PathBuf}, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    fs::{self, File},
+    io::BufReader,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 use tracing::{error, info, warn};
-use url::Url;
 use uuid::Uuid;
 
 use domain::repositories::job::JobRepository;
@@ -100,15 +110,10 @@ impl RecordingEngineWebhookUseCase {
             .live_info
             .ok_or_else(|| anyhow::anyhow!("live_info is required"))?;
         let title = live_info.title.clone();
-        let cover = live_info
-            .cover
-            .ok_or_else(|| anyhow::anyhow!("cover is required for poster upload"))?;
-
-        let poster_storage_path = self.upload_cover(&cover).await?;
 
         let insert_model = InsertRecordingModel {
             live_account_id: live_account.id,
-            poster_storage_path: Some(poster_storage_path),
+            poster_storage_path: None,
             title,
         };
 
@@ -137,7 +142,12 @@ impl RecordingEngineWebhookUseCase {
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
         let storage_path = self.validate_local_path(&storage_path_raw)?;
 
-        let recording_id = if let Some(recording) = self.repository
+        let poster_storage_path = self
+            .find_and_upload_cover_from_output(&storage_path)
+            .await?;
+
+        let recording_id = if let Some(recording) = self
+            .repository
             .find_recording_by_live_account_and_status(
                 platform_string.clone(),
                 channel.clone(),
@@ -192,9 +202,20 @@ impl RecordingEngineWebhookUseCase {
 
         // Update recording status to WaitingUpload and store local path
         let path_str = storage_path.to_string_lossy().into_owned();
+        let changeset = RecordingTransmuxUpdateEntity {
+            storage_path: Some(path_str.clone()),
+            duration_sec,
+            status: RecordingStatus::WaitingUpload.to_string(),
+            updated_at: Utc::now(),
+            poster_storage_path: poster_storage_path.map(Some),
+        };
+
         let updated_recording_id = self
             .repository
-            .update_live_transmux_finish(recording_id, path_str.clone(), duration_sec)
+            .update_live_transmux_finish(
+                recording_id,
+                changeset,
+            )
             .await?;
 
         // Enqueue upload job
@@ -280,47 +301,57 @@ impl RecordingEngineWebhookUseCase {
         Ok(canonical)
     }
 
-    async fn upload_cover(&self, cover_url: &str) -> Result<String> {
-        let trimmed_cover = cover_url.trim();
-        if trimmed_cover.is_empty() {
-            bail!("cover url cannot be empty");
+    async fn find_and_upload_cover_from_output(
+        &self,
+        video_output_path: &Path,
+    ) -> Result<Option<String>> {
+        if !video_output_path.exists() {
+            warn!(path = %video_output_path.display(), "transmux output path does not exist");
+            return Ok(None);
         }
 
-        let response = self
-            .http_client
-            .get(trimmed_cover)
-            .send()
-            .await
-            .context("failed to download cover image")?;
+        let candidate = self.find_existing_cover_path(video_output_path).await?;
+        let Some(cover_path) = candidate else {
+            return Ok(None);
+        };
 
-        if !response.status().is_success() {
-            bail!(
-                "failed to download cover image, status: {}",
-                response.status()
-            );
+        let stored_path = self.upload_cover_from_file(&cover_path).await?;
+        Ok(Some(stored_path))
+    }
+
+    async fn find_existing_cover_path(&self, video_output_path: &Path) -> Result<Option<PathBuf>> {
+        let extensions = ["jpg", "jpeg", "png", "webp"];
+        for ext in extensions {
+            let candidate = video_output_path.with_extension(ext);
+            if candidate.exists() {
+                let canonical = self.validate_local_path(&candidate.to_string_lossy())?;
+                return Ok(Some(canonical));
+            }
         }
 
-        let content_type = response
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| "application/octet-stream".to_string());
+        Ok(None)
+    }
 
-        let bytes = response
-            .bytes()
-            .await
-            .context("failed to read cover bytes")?;
+    async fn upload_cover_from_file(&self, cover_path: &Path) -> Result<String> {
+        let bytes = fs::read(cover_path)
+            .with_context(|| format!("failed to read cover file: {}", cover_path.display()))?;
 
-        let extension = Url::parse(trimmed_cover)
-            .ok()
-            .and_then(|url| {
-                url.path_segments()
-                    .and_then(|segments| segments.last().map(String::from))
+        let content_type = cover_path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| match ext.to_ascii_lowercase().as_str() {
+                "jpg" | "jpeg" => "image/jpeg",
+                "png" => "image/png",
+                "webp" => "image/webp",
+                _ => "application/octet-stream",
             })
-            .and_then(|filename| filename.split('.').last().map(String::from))
+            .unwrap_or("application/octet-stream");
+
+        let extension = cover_path
+            .extension()
+            .and_then(|ext| ext.to_str())
             .filter(|ext| !ext.is_empty())
-            .unwrap_or_else(|| "jpg".to_string());
+            .unwrap_or("jpg");
 
         let object_name = format!("poster-{}.{}", Uuid::new_v4(), extension);
         let object_path = format!("recordings/{}", object_name);
@@ -332,6 +363,7 @@ impl RecordingEngineWebhookUseCase {
             object_path
         );
 
+        // Supabase Storage upload API: https://supabase.com/docs/guides/storage/api/upload
         let upload_response = self
             .http_client
             .post(upload_url)

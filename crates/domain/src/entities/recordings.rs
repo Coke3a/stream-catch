@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
+use diesel::{AsChangeset, prelude::*};
 use uuid::Uuid;
 
 use crate::schema::recordings;
@@ -33,4 +33,14 @@ pub struct InsertRecordingEntity {
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(AsChangeset)]
+#[diesel(table_name = recordings)]
+pub struct RecordingTransmuxUpdateEntity {
+    pub storage_path: Option<String>,
+    pub duration_sec: Option<i32>,
+    pub status: String,
+    pub updated_at: chrono::DateTime<Utc>,
+    pub poster_storage_path: Option<Option<String>>,
 }

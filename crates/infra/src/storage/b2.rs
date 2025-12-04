@@ -114,6 +114,8 @@ impl StorageClient for B2StorageClient {
             .await
             .with_context(|| format!("failed to open recording file {}", local_path))?;
 
+        // Backblaze B2 S3-compatible PutObject request reference:
+        // https://www.backblaze.com/docs/cloud-storage-s3-compatible-apis#put-object
         self.client
             .put_object()
             .bucket(&self.bucket)
