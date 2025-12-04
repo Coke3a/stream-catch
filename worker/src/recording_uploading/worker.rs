@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, bail};
 use crates::domain::{
-    self,
     entities::jobs::JobEntity,
     repositories::{
         job::JobRepository, recording_upload::RecordingUploadRepository, storage::StorageClient,

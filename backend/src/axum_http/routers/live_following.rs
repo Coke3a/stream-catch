@@ -4,7 +4,7 @@ use axum::{
     Router,
     extract::{Path, State},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{post},
 };
 use crates::{
     domain::repositories::live_following::LiveFollowingRepository,
