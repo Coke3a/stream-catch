@@ -2,7 +2,7 @@ use crate::axum_http::auth::AuthUser;
 use crate::usecases::subscriptions::SubscriptionUseCase;
 use axum::{
     Json, Router,
-    extract::{State},
+    extract::State,
     response::IntoResponse,
     routing::{get, post},
 };
