@@ -20,7 +20,6 @@ impl InsertLiveAccountUseCase {
 
     pub async fn get_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {
         let accounts = self.repository.find_unsynced_live_accounts().await?;
-        info!(count = accounts.len(), "found unsynced live accounts");
         Ok(accounts)
     }
 

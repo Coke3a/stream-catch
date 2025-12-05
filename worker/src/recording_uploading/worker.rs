@@ -34,8 +34,6 @@ pub async fn run(
                 }
             }
             Ok(None) => {
-                // No jobs, sleep
-                info!("No jobs found.");
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
             Err(e) => {
@@ -54,7 +52,7 @@ async fn process_recording_upload_job(
 ) -> Result<()> {
     let payload: RecordingUploadPayload = serde_json::from_value(job.payload.clone())?;
 
-    let local_path = validate_local_path(&payload.local_path)?;
+    let local_path = canonicalize_path(&payload.local_path)?;
     let local_path_str = local_path.to_string_lossy().into_owned();
 
     let recording = recording_repo
@@ -80,20 +78,13 @@ async fn process_recording_upload_job(
     Ok(())
 }
 
-fn validate_local_path(path: &str) -> Result<PathBuf> {
-    let base = env::var("RECORDING_LOCAL_BASE").unwrap_or_else(|_| "/var/recordings".to_string());
-    let base = PathBuf::from(base)
-        .canonicalize()
-        .context("failed to canonicalize allowed recording base")?;
+fn canonicalize_path(path: &str) -> Result<PathBuf> {
 
     let candidate = PathBuf::from(path);
     let canonical = candidate
         .canonicalize()
         .with_context(|| format!("failed to canonicalize recording path: {path}"))?;
 
-    if !canonical.starts_with(&base) {
-        bail!("recording path is outside the allowed directory");
-    }
 
     Ok(canonical)
 }

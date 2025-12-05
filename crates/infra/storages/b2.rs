@@ -43,6 +43,7 @@ impl B2StorageClient {
             secret_key: config.application_key,
             force_path_style: true,
             connect_timeout_secs: 10,
+            read_timeout_secs: 300,
         })
         .await
         .context("failed to build B2 s3 client")?;
@@ -80,7 +81,7 @@ impl StorageClient for B2StorageClient {
             .filter(|ext| !ext.is_empty())
             .unwrap_or("mp4");
 
-        let object_name = format!("recording-{}.{}", recording.id, extension);
+        let object_name = format!("recording-{}_origin.{}", recording.id, extension);
         let object_key = format!("{}{}", self.key_prefix, object_name);
 
         let content_type = MimeGuess::from_path(path)
@@ -239,8 +240,8 @@ mod tests {
 
         let result = client.upload_recording(path_str, &recording).await?;
         println!(
-            "uploaded recording to {} ({} bytes)",
-            result.remote_prefix, result.size_bytes
+            "uploaded recording to {} ({} bytes). duration: {}",
+            result.remote_prefix, result.size_bytes, result.duration_sec
         );
 
         Ok(())

@@ -21,7 +21,7 @@ use std::{
     sync::Arc,
 };
 use tokio::process::Command;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use domain::repositories::job::JobRepository;
@@ -108,7 +108,8 @@ impl RecordingEngineWebhookUseCase {
             .output
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
-        let storage_path = self.validate_local_path(&storage_path_raw)?;
+        let storage_path = Self::container_to_host_path(&storage_path_raw);
+
 
         let recording_id = if let Some(recording) = self
             .repository
@@ -248,22 +249,18 @@ impl RecordingEngineWebhookUseCase {
         .context("failed to join duration reader task")?
     }
 
-    fn validate_local_path(&self, path: &str) -> Result<PathBuf> {
-        let base = self
-            .allowed_recording_base
-            .canonicalize()
-            .context("failed to canonicalize allowed recording base")?;
 
-        let candidate = PathBuf::from(path);
-        let canonical = candidate
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize recording path: {path}"))?;
+    fn container_to_host_path(container_path: &str) -> PathBuf {
+        let host_base = Path::new("/home/coke/projects-2/orec");
+        let prefix = "/app/";
 
-        if !canonical.starts_with(&base) {
-            bail!("recording path is outside the allowed directory");
+        if let Some(stripped) = container_path.strip_prefix(prefix) {
+            host_base.join(stripped)
+        } else if container_path == "/app" {
+            host_base.to_path_buf()
+        } else {
+            PathBuf::from(container_path)
         }
-
-        Ok(canonical)
     }
 
     async fn generate_and_upload_cover_from_video(

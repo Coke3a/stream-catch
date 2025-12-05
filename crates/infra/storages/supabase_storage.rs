@@ -36,6 +36,7 @@ impl SupabaseStorageClient {
             secret_key: config.secret_key,
             force_path_style: true,
             connect_timeout_secs: 10,
+            read_timeout_secs: 60,
         })
         .await
         .context("failed to build Supabase s3 client")?;

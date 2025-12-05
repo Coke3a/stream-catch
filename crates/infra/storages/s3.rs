@@ -3,7 +3,10 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use aws_config::{BehaviorVersion, timeout::TimeoutConfig};
 use aws_credential_types::Credentials;
-use aws_sdk_s3::{Client, config::Region};
+use aws_sdk_s3::{
+    Client,
+    config::{Region, StalledStreamProtectionConfig},
+};
 use http::Uri;
 use std::str::FromStr;
 
@@ -15,6 +18,7 @@ pub struct S3Config {
     pub secret_key: String,
     pub force_path_style: bool,
     pub connect_timeout_secs: u64,
+    pub read_timeout_secs: u64,
 }
 
 impl S3Config {
@@ -26,6 +30,7 @@ impl S3Config {
             secret_key,
             force_path_style: true,
             connect_timeout_secs: 10,
+            read_timeout_secs: 60,
         }
     }
 }
@@ -49,6 +54,7 @@ pub async fn build_s3_client(config: &S3Config) -> Result<Client> {
         .timeout_config(
             TimeoutConfig::builder()
                 .connect_timeout(Duration::from_secs(config.connect_timeout_secs))
+                .read_timeout(Duration::from_secs(config.read_timeout_secs))
                 .build(),
         )
         .load()
@@ -58,6 +64,7 @@ pub async fn build_s3_client(config: &S3Config) -> Result<Client> {
         .endpoint_url(endpoint)
         .force_path_style(config.force_path_style)
         .region(region)
+        .stalled_stream_protection(StalledStreamProtectionConfig::disabled())
         .build();
 
     Ok(Client::from_conf(s3_config))

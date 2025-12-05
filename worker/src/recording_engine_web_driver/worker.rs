@@ -10,6 +10,7 @@ use tracing::{error, info};
 use crate::usecases::insert_live_account_recording_engine::InsertLiveAccountUseCase;
 
 pub async fn run(usecase: Arc<InsertLiveAccountUseCase>) -> Result<()> {
+    info!("Starting RecordingEngineWebDriver worker loop");
     loop {
         if let Err(e) = process_unsynced_live_accounts(&usecase).await {
             error!("Error while processing unsynced live accounts: {}", e);
@@ -20,7 +21,6 @@ pub async fn run(usecase: Arc<InsertLiveAccountUseCase>) -> Result<()> {
 }
 
 async fn process_unsynced_live_accounts(usecase: &InsertLiveAccountUseCase) -> Result<()> {
-    info!("Checking for unsynced live accounts...");
     let accounts = match usecase.get_unsynced_live_accounts().await {
         Ok(accounts) => accounts,
         Err(e) => {
@@ -30,7 +30,6 @@ async fn process_unsynced_live_accounts(usecase: &InsertLiveAccountUseCase) -> R
     };
 
     if accounts.is_empty() {
-        info!("No unsynced accounts found.");
         return Ok(());
     }
 
