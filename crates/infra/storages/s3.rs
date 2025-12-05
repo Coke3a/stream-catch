@@ -31,7 +31,7 @@ impl S3Config {
 }
 
 pub async fn build_s3_client(config: &S3Config) -> Result<Client> {
-    let endpoint = config.endpoint.trim_end_matches('/').to_string();
+    let endpoint = format!("{}/", config.endpoint.trim_end_matches('/'));
     Uri::from_str(&endpoint).context("invalid s3 endpoint URL")?;
 
     let credentials = Credentials::new(
