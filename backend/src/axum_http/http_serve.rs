@@ -1,8 +1,5 @@
 use crate::{
-    axum_http::{
-        default_routers,
-        routers::{self, subscriptions::routes},
-    },
+    axum_http::{default_routers, routers},
     config::config_model::DotEnvyConfig,
 };
 use anyhow::Result;
@@ -33,7 +30,14 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
             "/api/v1/live-following",
             routers::live_following::routes(Arc::clone(&db_pool)),
         )
-        .nest("/api/v1/subscriptions", routes(Arc::clone(&db_pool)))
+        .nest(
+            "/api/v1/watch-url",
+            routers::watch_url::routes(Arc::clone(&db_pool), config.watch_url.clone()),
+        )
+        .nest(
+            "/api/v1/subscriptions",
+            routers::subscriptions::routes(Arc::clone(&db_pool)),
+        )
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
             config.backend_server.timeout,

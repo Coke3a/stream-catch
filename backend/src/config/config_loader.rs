@@ -22,6 +22,16 @@ pub fn load() -> Result<DotEnvyConfig> {
         jwt_secret: std::env::var("SUPABASE_JWT_SECRET").expect("SUPABASE_JWT_SECRET is invalid"),
     };
 
+    let watch_url = super::config_model::WatchUrl {
+        jwt_secret: std::env::var("WATCH_URL_JWT_SECRET").expect("WATCH_URL_JWT_SECRET is invalid"),
+        base_url: std::env::var("WATCH_URL_BASE_URL").expect("WATCH_URL_BASE_URL is invalid"),
+        ttl_seconds: std::env::var("WATCH_URL_TTL_SECONDS")
+            .ok()
+            .map(|v| v.parse())
+            .transpose()?
+            .unwrap_or(600),
+    };
+
     let database = super::config_model::Database {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
     };
@@ -30,6 +40,7 @@ pub fn load() -> Result<DotEnvyConfig> {
         backend_server,
         database,
         supabase,
+        watch_url,
     })
 }
 
