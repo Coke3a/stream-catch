@@ -31,7 +31,6 @@ pub struct RecordingEngineWebhookUseCase {
     repository: Arc<dyn RecordingEngineWebhookRepository + Send + Sync>,
     job_repository: Arc<dyn JobRepository + Send + Sync>,
     cover_storage: Arc<dyn CoverStorageClient + Send + Sync>,
-    allowed_recording_base: PathBuf,
 }
 
 impl RecordingEngineWebhookUseCase {
@@ -39,13 +38,11 @@ impl RecordingEngineWebhookUseCase {
         repository: Arc<dyn RecordingEngineWebhookRepository + Send + Sync>,
         job_repository: Arc<dyn JobRepository + Send + Sync>,
         cover_storage: Arc<dyn CoverStorageClient + Send + Sync>,
-        allowed_recording_base: PathBuf,
     ) -> Self {
         Self {
             repository,
             job_repository,
             cover_storage,
-            allowed_recording_base,
         }
     }
 

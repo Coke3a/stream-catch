@@ -81,10 +81,6 @@ async fn run() -> Result<()> {
         .await?,
     );
 
-    let allowed_recording_base: PathBuf = env::var("RECORDING_LOCAL_BASE")
-        .unwrap_or_else(|_| "/var/recordings".to_string())
-        .into();
-
     let recording_engine_webhook_repository: Arc<
         dyn RecordingEngineWebhookRepository + Send + Sync,
     > = Arc::new(RecordingEngineWebhookPostgres::new(Arc::clone(
@@ -98,7 +94,6 @@ async fn run() -> Result<()> {
         recording_engine_webhook_repository,
         Arc::clone(&job_repository),
         cover_storage_client,
-        allowed_recording_base,
     ));
 
     let server_config = Arc::clone(&dotenvy_env);

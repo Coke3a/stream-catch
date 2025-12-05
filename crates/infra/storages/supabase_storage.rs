@@ -70,7 +70,7 @@ impl CoverStorageClient for SupabaseStorageClient {
             .await
             .map_err(|err| map_put_object_error(err, &self.bucket, &object_key))?;
 
-        Ok(format!("{}/{}", self.bucket, object_key))
+        Ok(format!("{}", object_key))
     }
 }
 
