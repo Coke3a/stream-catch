@@ -129,6 +129,9 @@ diesel::table! {
         duration_days -> Int4,
         features -> Jsonb,
         is_active -> Bool,
+        stripe_price_recurring -> Nullable<Text>,
+        stripe_price_one_time_card -> Nullable<Text>,
+        stripe_price_one_time_promptpay -> Nullable<Text>,
     }
 }
 
@@ -162,6 +165,7 @@ diesel::table! {
         default_payment_method_id -> Nullable<Uuid>,
         cancel_at_period_end -> Bool,
         canceled_at -> Nullable<Timestamptz>,
+        provider_subscription_id -> Nullable<Text>,
         status -> Text,
         created_at -> Timestamptz,
     }

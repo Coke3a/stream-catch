@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use crates::domain::{
     entities::jobs::JobEntity,
     repositories::{
@@ -6,7 +6,7 @@ use crates::domain::{
     },
     value_objects::recording_upload::RecordingUploadPayload,
 };
-use std::{env, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tracing::{error, info};
 
 pub async fn run(
@@ -79,12 +79,10 @@ async fn process_recording_upload_job(
 }
 
 fn canonicalize_path(path: &str) -> Result<PathBuf> {
-
     let candidate = PathBuf::from(path);
     let canonical = candidate
         .canonicalize()
         .with_context(|| format!("failed to canonicalize recording path: {path}"))?;
-
 
     Ok(canonical)
 }

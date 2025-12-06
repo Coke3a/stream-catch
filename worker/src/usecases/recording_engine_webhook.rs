@@ -21,7 +21,7 @@ use std::{
     sync::Arc,
 };
 use tokio::process::Command;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use domain::repositories::job::JobRepository;
@@ -106,7 +106,6 @@ impl RecordingEngineWebhookUseCase {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
         let storage_path = Self::container_to_host_path(&storage_path_raw);
-
 
         let recording_id = if let Some(recording) = self
             .repository
@@ -245,7 +244,6 @@ impl RecordingEngineWebhookUseCase {
         .await
         .context("failed to join duration reader task")?
     }
-
 
     fn container_to_host_path(container_path: &str) -> PathBuf {
         let host_base = Path::new("/home/coke/projects-2/orec");

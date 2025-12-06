@@ -15,7 +15,10 @@ use domain::{
     entities::recordings::RecordingEntity,
     repositories::recording_dashboard::RecordingDashboardRepository,
     value_objects::{
-        enums::{follow_statuses::FollowStatus, sort_order::SortOrder},
+        enums::{
+            follow_statuses::FollowStatus,
+            sort_order::SortOrder,
+        },
         recordings::ListRecordingsFilter,
     },
 };

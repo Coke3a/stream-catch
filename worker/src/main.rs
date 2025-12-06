@@ -18,7 +18,7 @@ use crates::infra::{
         supabase_storage::{SupabaseStorageClient, SupabaseStorageConfig},
     },
 };
-use std::{env, path::PathBuf, sync::Arc};
+use std::sync::Arc;
 use tracing::error;
 use tracing::info;
 use worker::{

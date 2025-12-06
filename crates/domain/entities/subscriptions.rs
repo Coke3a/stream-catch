@@ -16,6 +16,7 @@ pub struct SubscriptionEntity {
     pub default_payment_method_id: Option<Uuid>,
     pub cancel_at_period_end: bool,
     pub canceled_at: Option<DateTime<Utc>>,
+    pub provider_subscription_id: Option<String>,
     pub status: String,
     pub created_at: DateTime<Utc>,
 }
@@ -31,5 +32,6 @@ pub struct InsertSubscriptionEntity {
     pub default_payment_method_id: Option<Uuid>,
     pub cancel_at_period_end: bool,
     pub canceled_at: Option<DateTime<Utc>>,
+    pub provider_subscription_id: Option<String>,
     pub status: String,
 }
