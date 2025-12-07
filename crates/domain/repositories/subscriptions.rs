@@ -1,16 +1,40 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use mockall::automock;
 use uuid::Uuid;
 
-use crate::domain::entities::{plans::PlanEntity, subscriptions::InsertSubscriptionEntity};
+use crate::domain::entities::subscriptions::SubscriptionEntity;
+use crate::domain::value_objects::enums::{
+    billing_modes::BillingMode, subscription_statuses::SubscriptionStatus,
+};
 
 #[async_trait]
 #[automock]
 pub trait SubscriptionRepository {
-    async fn list_plans(&self) -> Result<Vec<PlanEntity>>;
-    async fn subscribe(&self, insert_subscription_entity: InsertSubscriptionEntity)
-    -> Result<Uuid>;
-    async fn cancel_subscription(&self, subscription_id: Uuid) -> Result<()>;
-    async fn check_current_user_subscription(&self, user_id: Uuid) -> Result<bool>;
+    async fn find_current_active_subscription(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<SubscriptionEntity>>;
+
+    async fn find_current_active_non_free_subscription(
+        &self,
+        user_id: Uuid,
+        free_plan_id: Uuid,
+    ) -> Result<Option<SubscriptionEntity>>;
+
+    async fn create_or_update_subscription_after_checkout(
+        &self,
+        user_id: Uuid,
+        plan_id: Uuid,
+        billing_mode: BillingMode,
+        starts_at: DateTime<Utc>,
+        ends_at: DateTime<Utc>,
+        status: SubscriptionStatus,
+        provider_subscription_id: Option<String>,
+    ) -> Result<Uuid>;
+
+    async fn cancel_recurring_subscription(&self, user_id: Uuid) -> Result<()>;
+
+    async fn list_active_subscriptions(&self) -> Result<Vec<SubscriptionEntity>>;
 }

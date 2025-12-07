@@ -22,3 +22,14 @@ impl Display for SubscriptionStatus {
         write!(f, "{}", status)
     }
 }
+
+impl SubscriptionStatus {
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "past_due" => SubscriptionStatus::PastDue,
+            "canceled" => SubscriptionStatus::Canceled,
+            "expired" => SubscriptionStatus::Expired,
+            _ => SubscriptionStatus::Active,
+        }
+    }
+}

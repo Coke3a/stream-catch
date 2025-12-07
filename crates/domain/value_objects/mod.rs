@@ -2,6 +2,7 @@ pub mod enums;
 pub mod iam;
 pub mod jobs;
 pub mod live_following;
+pub mod plans;
 pub mod recording_engine_webhook;
 pub mod recording_upload;
 pub mod recordings;

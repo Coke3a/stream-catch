@@ -1,6 +1,10 @@
+pub mod invoices;
 pub mod job;
 pub mod live_account_recording_engine;
 pub mod live_following;
+pub mod payment_provider_customers;
+pub mod payments;
+pub mod plans;
 pub mod recording_dashboard;
 pub mod recording_engine_webhook;
 pub mod recording_upload;

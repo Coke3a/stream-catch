@@ -36,3 +36,6 @@ pub struct InsertPaymentEntity {
     pub provider_session_ref: Option<String>,
     pub error: Option<String>,
 }
+
+// NewPaymentEntity is the application-facing alias for inserting rows into `payments`.
+pub type NewPaymentEntity = InsertPaymentEntity;
