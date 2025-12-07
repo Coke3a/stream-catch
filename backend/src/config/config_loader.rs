@@ -1,7 +1,8 @@
 use crate::config::stage::Stage;
 
-use super::config_model::{BackendServer, DotEnvyConfig};
+use super::config_model::{BackendServer, DotEnvyConfig, StripeConfig};
 use anyhow::Result;
+use uuid::Uuid;
 
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
@@ -36,11 +37,28 @@ pub fn load() -> Result<DotEnvyConfig> {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
     };
 
+    let stripe = StripeConfig {
+        secret_key: std::env::var("STRIPE_SECRET_KEY").expect("STRIPE_SECRET_KEY is invalid"),
+        webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET")
+            .expect("STRIPE_WEBHOOK_SECRET is invalid"),
+        success_url: std::env::var("STRIPE_SUCCESS_URL").unwrap_or_else(|_| {
+            "https://example.com/checkout/success?session_id={CHECKOUT_SESSION_ID}".to_string()
+        }),
+        cancel_url: std::env::var("STRIPE_CANCEL_URL")
+            .unwrap_or_else(|_| "https://example.com/checkout/cancel".to_string()),
+    };
+
+    let free_plan_id =
+        std::env::var("STREAMCATCH_FREE_PLAN_ID").unwrap_or_else(|_| Uuid::nil().to_string());
+    let free_plan_id = Uuid::parse_str(&free_plan_id).expect("STREAMCATCH_FREE_PLAN_ID is invalid");
+
     Ok(DotEnvyConfig {
         backend_server,
         database,
         supabase,
         watch_url,
+        stripe,
+        free_plan_id,
     })
 }
 

@@ -1,10 +1,14 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use crates::domain;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::usecases::plan_resolver::PlanResolver;
 use domain::{
-    repositories::live_following::LiveFollowingRepository,
+    repositories::{
+        live_following::LiveFollowingRepository, plans::PlanRepository,
+        subscriptions::SubscriptionRepository,
+    },
     value_objects::enums::{
         follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus,
         platforms::Platform,
@@ -12,20 +16,26 @@ use domain::{
 };
 use tracing::{debug, info, warn};
 
-pub struct LiveFollowingUseCase<T>
+pub struct LiveFollowingUseCase<L, P, S>
 where
-    T: LiveFollowingRepository + Send + Sync,
+    L: LiveFollowingRepository + Send + Sync + 'static,
+    P: PlanRepository + Send + Sync + 'static,
+    S: SubscriptionRepository + Send + Sync + 'static,
 {
-    live_following_repository: Arc<T>,
+    live_following_repository: Arc<L>,
+    plan_resolver: Arc<PlanResolver<P, S>>,
 }
 
-impl<T> LiveFollowingUseCase<T>
+impl<L, P, S> LiveFollowingUseCase<L, P, S>
 where
-    T: LiveFollowingRepository + Send + Sync,
+    L: LiveFollowingRepository + Send + Sync + 'static,
+    P: PlanRepository + Send + Sync + 'static,
+    S: SubscriptionRepository + Send + Sync + 'static,
 {
-    pub fn new(live_following_repository: Arc<T>) -> Self {
+    pub fn new(live_following_repository: Arc<L>, plan_resolver: Arc<PlanResolver<P, S>>) -> Self {
         Self {
             live_following_repository,
+            plan_resolver,
         }
     }
 
@@ -44,6 +54,8 @@ where
         let active_status = FollowStatus::Active.to_string();
         let inactive_status = FollowStatus::Inactive.to_string();
         let now = chrono::Utc::now();
+
+        self.ensure_follow_quota(user_id).await?;
 
         // Try to find existing live account first
         let live_account_result = self
@@ -144,6 +156,32 @@ where
 
                 info!("live_following: new live account and follow created");
             }
+        }
+
+        Ok(())
+    }
+
+    /// Ensures the user has remaining follow slots based on the active plan.
+    async fn ensure_follow_quota(&self, user_id: Uuid) -> Result<()> {
+        let plan = self
+            .plan_resolver
+            .resolve_effective_plan_for_user(user_id)
+            .await?;
+        let features = plan.features;
+
+        let current = self
+            .live_following_repository
+            .count_active_follows(user_id)
+            .await?;
+
+        let max_follows = features.max_follows.unwrap_or(0);
+
+        if max_follows <= 0 || current >= max_follows {
+            return Err(anyhow!(
+                "follow limit reached: current={} max={}",
+                current,
+                max_follows
+            ));
         }
 
         Ok(())

@@ -92,13 +92,11 @@ export default {
       return new Response("B2_BUCKET_NAME is not set", { status: 500 });
     }
 
-    // path จาก URL เช่น "/recording-xxx.mp4"
     let objectPath = url.pathname.replace(/^\/+/, "");
     if (!objectPath) {
       return new Response("Please specify a file path", { status: 400 });
     }
 
-    // ถ้าคุณเก็บไฟล์ใต้ recordings/ ให้เติม prefix ตรงนี้
     const b2Path = `recordings/${objectPath}`;
 
     const token = url.searchParams.get("token");
@@ -112,14 +110,14 @@ export default {
     }
 
     const match = objectPath.match(/^recording-(.+)\.mp4$/);
-    const recordingKeyFromPath = match ? match[1] : null;
-    if (!recordingKeyFromPath) {
+    const recordingIdFromPath = match ? match[1] : null;
+    if (!recordingIdFromPath) {
       return new Response("Invalid recording path", { status: 400 });
     }
 
     try {
       const claims = await verifyJwt(token, jwtSecret);
-      if (claims.sub !== recordingKeyFromPath) {
+      if (claims.sub !== recordingIdFromPath) {
         return new Response("Token not valid for this recording", { status: 403 });
       }
     } catch (err) {
@@ -185,7 +183,6 @@ export default {
     }
 
     const resp = new Response(originResp.body, originResp);
-    // ปรับเวลาตามที่อยาก cache
     resp.headers.set("Cache-Control", "public, max-age=3600");
 
     return resp;

@@ -28,16 +28,20 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
         .fallback(default_routers::not_found)
         .nest(
             "/api/v1/live-following",
-            routers::live_following::routes(Arc::clone(&db_pool)),
+            routers::live_following::routes(Arc::clone(&db_pool), Arc::clone(&config)),
         )
         .nest(
             "/api/v1/watch-url",
-            routers::watch_url::routes(Arc::clone(&db_pool), config.watch_url.clone()),
+            routers::watch_url::routes(Arc::clone(&db_pool), Arc::clone(&config)),
         )
         .nest(
             "/api/v1/subscriptions",
-            routers::subscriptions::routes(Arc::clone(&db_pool)),
+            routers::subscriptions::routes(Arc::clone(&db_pool), Arc::clone(&config)),
         )
+        .nest(
+            "/api",
+            routers::subscriptions::webhook_routes(Arc::clone(&db_pool), Arc::clone(&config)),
+        ) 
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
             config.backend_server.timeout,

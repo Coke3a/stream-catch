@@ -1,5 +1,5 @@
-use crate::axum_http::auth::AuthUser;
-use crate::usecases::live_following::LiveFollowingUseCase;
+use crate::usecases::{live_following::LiveFollowingUseCase, plan_resolver::PlanResolver};
+use crate::{axum_http::auth::AuthUser, config::config_model::DotEnvyConfig};
 use axum::{
     Router,
     extract::{Path, State},
@@ -7,30 +7,51 @@ use axum::{
     routing::post,
 };
 use crates::{
-    domain::repositories::live_following::LiveFollowingRepository,
+    domain::repositories::{
+        live_following::LiveFollowingRepository, plans::PlanRepository,
+        subscriptions::SubscriptionRepository,
+    },
     infra::db::{
         postgres::postgres_connection::PgPoolSquad,
-        repositories::live_following::LiveFollowingPostgres,
+        repositories::{
+            live_following::LiveFollowingPostgres, plans::PlanPostgres,
+            subscriptions::SubscriptionPostgres,
+        },
     },
 };
 use std::sync::Arc;
 
-pub fn routes(db_pool: Arc<PgPoolSquad>) -> Router {
+pub fn routes(db_pool: Arc<PgPoolSquad>, config: Arc<DotEnvyConfig>) -> Router {
     let live_following_repository = LiveFollowingPostgres::new(Arc::clone(&db_pool));
-    let live_following_usecase = LiveFollowingUseCase::new(Arc::new(live_following_repository));
+    let plan_repository = PlanPostgres::new(Arc::clone(&db_pool));
+    let subscription_repository = SubscriptionPostgres::new(Arc::clone(&db_pool));
+
+    let plan_resolver = PlanResolver::new(
+        Arc::new(plan_repository),
+        Arc::new(subscription_repository),
+        config.free_plan_id,
+    );
+
+    let live_following_usecase =
+        LiveFollowingUseCase::new(
+            Arc::new(live_following_repository), 
+            Arc::new(plan_resolver)
+        );
 
     Router::new()
         .route("/:value", post(follow))
         .with_state(Arc::new(live_following_usecase))
 }
 
-pub async fn follow<T>(
-    State(live_following_usecase): State<Arc<LiveFollowingUseCase<T>>>,
+pub async fn follow<L, P, S>(
+    State(live_following_usecase): State<Arc<LiveFollowingUseCase<L, P, S>>>,
     auth: AuthUser,
     Path(url): Path<String>,
 ) -> impl IntoResponse
 where
-    T: LiveFollowingRepository + Send + Sync,
+    L: LiveFollowingRepository + Send + Sync + 'static,
+    P: PlanRepository + Send + Sync + 'static,
+    S: SubscriptionRepository + Send + Sync + 'static,
 {
     use base64::{Engine as _, engine::general_purpose};
 
@@ -66,6 +87,8 @@ where
                 || error_message.contains("Unsupported platform")
             {
                 (axum::http::StatusCode::BAD_REQUEST, error_message).into_response()
+            } else if error_message.contains("follow limit reached") {
+                (axum::http::StatusCode::FORBIDDEN, error_message).into_response()
             } else {
                 (axum::http::StatusCode::INTERNAL_SERVER_ERROR, error_message).into_response()
             }

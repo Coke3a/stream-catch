@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
-use diesel::{Connection, RunQueryDsl, insert_into};
+use diesel::{Connection, RunQueryDsl, dsl::count_star, insert_into};
 use diesel::{prelude::*, update};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -144,5 +144,22 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
             .first::<FollowEntity>(&mut conn)?;
 
         Ok(result)
+    }
+
+    async fn count_active_follows(&self, user_id: Uuid) -> Result<i64> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let statuses = vec![
+            FollowStatus::Active.to_string(),
+            FollowStatus::TemporaryInactive.to_string(),
+        ];
+
+        let total = follows::table
+            .filter(follows::user_id.eq(user_id))
+            .filter(follows::status.eq_any(statuses))
+            .select(count_star())
+            .first::<i64>(&mut conn)?;
+
+        Ok(total)
     }
 }

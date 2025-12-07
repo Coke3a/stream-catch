@@ -27,4 +27,5 @@ pub trait LiveFollowingRepository {
         &self,
         find_live_account_model: &FindLiveAccountModel,
     ) -> Result<LiveAccountEntity>;
+    async fn count_active_follows(&self, user_id: Uuid) -> Result<i64>;
 }
