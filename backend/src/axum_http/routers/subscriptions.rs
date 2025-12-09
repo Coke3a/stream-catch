@@ -244,7 +244,10 @@ where
         }
     };
 
-    match usecase.handle_stripe_webhook(payload.as_ref(), &signature).await {
+    match usecase
+        .handle_stripe_webhook(payload.as_ref(), &signature)
+        .await
+    {
         Ok(_) => StatusCode::OK.into_response(),
         Err(err) => map_error(err),
     }

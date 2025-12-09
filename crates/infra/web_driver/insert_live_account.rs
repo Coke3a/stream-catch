@@ -4,6 +4,7 @@ use serde_json::json;
 use thirtyfour::error::WebDriverResult;
 use thirtyfour::extensions::cdp::ChromeDevTools;
 use thirtyfour::prelude::ElementWaitable;
+use thirtyfour::prelude::Key;
 use thirtyfour::{By, DesiredCapabilities, WebDriver};
 use tracing::info;
 use url::Url;
@@ -23,6 +24,7 @@ pub async fn add_account_recording_engine(
             added_accounts.push(account);
         } else {
             info!("Account {} not added", account.account_id);
+            // screenshot_debug(&driver, &format!("failed_{}.png", account.account_id)).await?;
             failed_accounts.push(account);
         }
     }
@@ -81,6 +83,8 @@ async fn check_account_is_added(
             "div.MuiBox-root.css-67s2z9 > div > div > div > div > input",
         ))
         .await?;
+    search_element.send_keys(Key::Control + "a").await?;
+    search_element.send_keys(Key::Backspace).await?;
     search_element.send_keys(username).await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     let xpath = format!(
@@ -95,9 +99,9 @@ async fn check_account_is_added(
 }
 
 // screenshot for debug
-// async fn screenshot_debug(driver: &WebDriver) -> Result<()> {
+// async fn screenshot_debug(driver: &WebDriver, file_name: &str) -> Result<()> {
 //     let png_bytes = driver.screenshot_as_png().await?;
-//     tokio::fs::write("screenshot.png", &png_bytes).await?;
-//     println!("Saved screenshot.png");
+//     tokio::fs::write(file_name, &png_bytes).await?;
+//     println!("Saved {}", file_name);
 //     Ok(())
 // }

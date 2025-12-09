@@ -23,6 +23,12 @@ pub trait SubscriptionRepository {
         free_plan_id: Uuid,
     ) -> Result<Option<SubscriptionEntity>>;
 
+    async fn update_status_by_provider_subscription_id(
+        &self,
+        provider_subscription_id: &str,
+        status: SubscriptionStatus,
+    ) -> Result<()>;
+
     async fn create_or_update_subscription_after_checkout(
         &self,
         user_id: Uuid,

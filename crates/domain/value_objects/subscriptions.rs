@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::domain::entities::plans::PlanEntity;
-use crate::domain::value_objects::enums::{billing_modes::BillingMode, subscription_statuses::SubscriptionStatus};
+use crate::domain::value_objects::enums::{
+    billing_modes::BillingMode, subscription_statuses::SubscriptionStatus,
+};
 use crate::domain::value_objects::plans::PlanFeatures;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

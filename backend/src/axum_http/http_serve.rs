@@ -41,7 +41,7 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
         .nest(
             "/api",
             routers::subscriptions::webhook_routes(Arc::clone(&db_pool), Arc::clone(&config)),
-        ) 
+        )
         .route("/api/v1/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
             config.backend_server.timeout,

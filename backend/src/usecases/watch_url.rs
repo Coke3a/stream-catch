@@ -86,7 +86,7 @@ where
         }
 
         let url = format!(
-            "{}/recording-{}.mp4?token={}",
+            "{}/recording-{}_origin.mp4?token={}",
             base_url, recording_id_str, token
         );
 

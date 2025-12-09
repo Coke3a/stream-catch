@@ -29,7 +29,7 @@ impl SubscriptionStatus {
             "past_due" => SubscriptionStatus::PastDue,
             "canceled" => SubscriptionStatus::Canceled,
             "expired" => SubscriptionStatus::Expired,
-            _ => SubscriptionStatus::Active,
+            _ => SubscriptionStatus::Expired,
         }
     }
 }

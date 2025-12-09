@@ -35,6 +35,42 @@ impl SubscriptionRepository for SubscriptionPostgres {
             .await
     }
 
+    async fn update_status_by_provider_subscription_id(
+        &self,
+        provider_subscription_id: &str,
+        status: SubscriptionStatus,
+    ) -> Result<()> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+        let status_str = status.to_string();
+
+        match status {
+            SubscriptionStatus::Expired | SubscriptionStatus::Canceled => {
+                update(
+                    subscriptions::table.filter(
+                        subscriptions::provider_subscription_id.eq(provider_subscription_id),
+                    ),
+                )
+                .set((
+                    subscriptions::status.eq(status_str),
+                    subscriptions::cancel_at_period_end.eq(true),
+                    subscriptions::canceled_at.eq(Some(Utc::now())),
+                ))
+                .execute(&mut conn)?;
+            }
+            _ => {
+                update(
+                    subscriptions::table.filter(
+                        subscriptions::provider_subscription_id.eq(provider_subscription_id),
+                    ),
+                )
+                .set(subscriptions::status.eq(status_str))
+                .execute(&mut conn)?;
+            }
+        }
+
+        Ok(())
+    }
+
     async fn find_current_active_non_free_subscription(
         &self,
         user_id: Uuid,
@@ -55,29 +91,6 @@ impl SubscriptionRepository for SubscriptionPostgres {
         provider_subscription_id: Option<String>,
     ) -> Result<Uuid> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
-
-        if let Some(existing) = subscriptions::table
-            .filter(subscriptions::user_id.eq(user_id))
-            .order(subscriptions::starts_at.desc())
-            .first::<SubscriptionEntity>(&mut conn)
-            .optional()?
-        {
-            let updated_id = update(subscriptions::table.filter(subscriptions::id.eq(existing.id)))
-                .set((
-                    subscriptions::plan_id.eq(plan_id),
-                    subscriptions::starts_at.eq(starts_at),
-                    subscriptions::ends_at.eq(ends_at),
-                    subscriptions::billing_mode.eq(billing_mode.to_string()),
-                    subscriptions::cancel_at_period_end.eq(false),
-                    subscriptions::canceled_at.eq::<Option<DateTime<Utc>>>(None),
-                    subscriptions::status.eq(status.to_string()),
-                    subscriptions::provider_subscription_id.eq(provider_subscription_id),
-                ))
-                .returning(subscriptions::id)
-                .get_result::<Uuid>(&mut conn)?;
-
-            return Ok(updated_id);
-        }
 
         let insert_subscription_entity = InsertSubscriptionEntity {
             user_id,
@@ -102,20 +115,22 @@ impl SubscriptionRepository for SubscriptionPostgres {
 
     async fn cancel_recurring_subscription(&self, user_id: Uuid) -> Result<()> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
+        let now = Utc::now();
 
         if let Some(current) = subscriptions::table
             .filter(subscriptions::user_id.eq(user_id))
             .filter(subscriptions::billing_mode.eq(BillingMode::Recurring.to_string()))
             .filter(subscriptions::status.eq(SubscriptionStatus::Active.to_string()))
+            .filter(subscriptions::starts_at.le(now))
+            .filter(subscriptions::ends_at.gt(now))
             .order(subscriptions::starts_at.desc())
             .first::<SubscriptionEntity>(&mut conn)
             .optional()?
         {
             update(subscriptions::table.filter(subscriptions::id.eq(current.id)))
                 .set((
-                    subscriptions::status.eq(SubscriptionStatus::Canceled.to_string()),
                     subscriptions::cancel_at_period_end.eq(true),
-                    subscriptions::canceled_at.eq(Some(Utc::now())),
+                    subscriptions::canceled_at.eq::<Option<DateTime<Utc>>>(None),
                 ))
                 .execute(&mut conn)?;
         }

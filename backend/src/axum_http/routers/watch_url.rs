@@ -58,10 +58,7 @@ pub fn routes(db_pool: Arc<PgPoolSquad>, config: Arc<DotEnvyConfig>) -> Router {
     );
 
     Router::new()
-        .route(
-            "/",
-            get(generate_watch_url),
-        )
+        .route("/", get(generate_watch_url))
         .with_state(Arc::new(usecase))
 }
 

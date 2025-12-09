@@ -109,7 +109,8 @@ export default {
       return new Response("Server misconfigured", { status: 500 });
     }
 
-    const match = objectPath.match(/^recording-(.+)\.mp4$/);
+    const fileName = objectPath.split("/").pop();
+    const match = fileName?.match(/^recording-([0-9a-fA-F-]+)(?:_[^./]+)?\.mp4$/);
     const recordingIdFromPath = match ? match[1] : null;
     if (!recordingIdFromPath) {
       return new Response("Invalid recording path", { status: 400 });
@@ -117,7 +118,10 @@ export default {
 
     try {
       const claims = await verifyJwt(token, jwtSecret);
-      if (claims.sub !== recordingIdFromPath) {
+      const tokenRecordingId = `${claims.sub || ""}`.toLowerCase();
+      const pathRecordingId = recordingIdFromPath.toLowerCase();
+      if (tokenRecordingId !== pathRecordingId) {
+        console.warn("Token recording mismatch", { pathRecordingId, tokenRecordingId, objectPath });
         return new Response("Token not valid for this recording", { status: 403 });
       }
     } catch (err) {

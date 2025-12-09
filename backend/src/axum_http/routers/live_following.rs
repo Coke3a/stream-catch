@@ -33,10 +33,7 @@ pub fn routes(db_pool: Arc<PgPoolSquad>, config: Arc<DotEnvyConfig>) -> Router {
     );
 
     let live_following_usecase =
-        LiveFollowingUseCase::new(
-            Arc::new(live_following_repository), 
-            Arc::new(plan_resolver)
-        );
+        LiveFollowingUseCase::new(Arc::new(live_following_repository), Arc::new(plan_resolver));
 
     Router::new()
         .route("/:value", post(follow))

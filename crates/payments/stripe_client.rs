@@ -142,15 +142,18 @@ impl StripeClient {
             .ok_or_else(|| anyhow::anyhow!("Stripe Checkout session URL is missing"))
     }
 
-    /// Cancels a Stripe subscription immediately.
+    /// Marks a Stripe subscription to cancel at period end.
     pub async fn cancel_subscription(&self, provider_subscription_id: &str) -> Result<()> {
-        // https://stripe.com/docs/api/subscriptions/cancel
+        // https://stripe.com/docs/api/subscriptions/cancel#cancel_subscription-at_period_end
+        let body = [("cancel_at_period_end", "true".to_string())];
         self.http
-            .delete(format!(
+            .post(format!(
                 "https://api.stripe.com/v1/subscriptions/{}",
                 provider_subscription_id
             ))
             .header(AUTHORIZATION, format!("Bearer {}", self.secret_key))
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .form(&body)
             .send()
             .await?
             .error_for_status()?;
