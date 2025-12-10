@@ -5,21 +5,21 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BillingMode {
     Recurring,
-    Manual,
+    OneTime,
 }
 
 impl BillingMode {
     pub fn as_str(&self) -> &'static str {
         match self {
             BillingMode::Recurring => "recurring",
-            BillingMode::Manual => "manual",
+            BillingMode::OneTime => "one_time",
         }
     }
 
     pub fn from_str(value: &str) -> Option<Self> {
         match value {
             "recurring" => Some(BillingMode::Recurring),
-            "manual" => Some(BillingMode::Manual),
+            "one_time" => Some(BillingMode::OneTime),
             _ => None,
         }
     }

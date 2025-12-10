@@ -5,6 +5,7 @@ use hmac::{Hmac, Mac};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use sha2::Sha256;
+use tracing::error;
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -109,9 +110,9 @@ impl StripeClient {
             ("cancel_url".to_string(), self.cancel_url.clone()),
         ];
 
-        for (idx, pm) in payment_method_types.iter().enumerate() {
-            body.push((format!("payment_method_types[{}]", idx), pm.clone()));
-        }
+        // for (idx, pm) in payment_method_types.iter().enumerate() {
+        //     body.push((format!("payment_method_types[{}]", idx), pm.clone()));
+        // }
 
         if let Some(customer) = customer_id {
             body.push(("customer".to_string(), customer));

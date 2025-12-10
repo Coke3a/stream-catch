@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
 
 async fn run() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::TRACE)
         .init();
 
     let dotenvy_env = Arc::new(config::config_loader::load()?);

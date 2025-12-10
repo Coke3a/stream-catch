@@ -218,7 +218,7 @@ where
                 .unwrap_or(BillingMode::Recurring);
 
             if current_billing_mode == BillingMode::Recurring
-                && (billing_mode == BillingMode::Recurring || billing_mode == BillingMode::Manual)
+                && (billing_mode == BillingMode::Recurring || billing_mode == BillingMode::OneTime)
             {
                 let provider_subscription_id = current_subscription
                     .provider_subscription_id
@@ -245,7 +245,7 @@ where
             }
         }
 
-        let manual_period = if billing_mode == BillingMode::Manual {
+        let one_time_period = if billing_mode == BillingMode::OneTime {
             let now = Utc::now();
             let starts_at = match current_subscription.as_ref() {
                 Some(current) => {
@@ -253,7 +253,7 @@ where
                         .unwrap_or(BillingMode::Recurring);
                     match current_billing_mode {
                         BillingMode::Recurring => current.ends_at,
-                        BillingMode::Manual => {
+                        BillingMode::OneTime => {
                             if current.ends_at > now {
                                 current.ends_at
                             } else {
@@ -287,21 +287,21 @@ where
             ("payment_method".to_string(), payment_method.to_string()),
         ]);
 
-        if let Some((manual_starts_at, manual_ends_at)) = manual_period {
+        if let Some((one_time_starts_at, one_time_ends_at)) = one_time_period {
             metadata.insert(
-                "manual_starts_at".to_string(),
-                manual_starts_at.timestamp().to_string(),
+                "one_time_starts_at".to_string(),
+                one_time_starts_at.timestamp().to_string(),
             );
             metadata.insert(
-                "manual_ends_at".to_string(),
-                manual_ends_at.timestamp().to_string(),
+                "one_time_ends_at".to_string(),
+                one_time_ends_at.timestamp().to_string(),
             );
         }
 
         let payment_method_types = vec![payment_method.to_string()];
         let mode = match billing_mode {
             BillingMode::Recurring => "subscription",
-            BillingMode::Manual => "payment",
+            BillingMode::OneTime => "payment",
         };
 
         info!(
@@ -412,7 +412,7 @@ where
                     .clone()
                     .ok_or(SubscriptionError::MissingPrice("stripe_price_recurring"))
             }
-            BillingMode::Manual => {
+            BillingMode::OneTime => {
                 match payment_method {
                     PaymentMethod::Card => plan.stripe_price_one_time_card.clone().ok_or(
                         SubscriptionError::MissingPrice("stripe_price_one_time_card"),
@@ -535,13 +535,13 @@ where
             }
             Some("payment") => {
                 let (starts_at, ends_at) =
-                    Self::manual_period_from_metadata(&metadata, plan.duration_days)?;
+                    Self::one_time_period_from_metadata(&metadata, plan.duration_days)?;
 
                 self.subscription_repo
                     .create_or_update_subscription_after_checkout(
                         user_id,
                         plan_id,
-                        BillingMode::Manual,
+                        BillingMode::OneTime,
                         starts_at,
                         ends_at,
                         SubscriptionStatus::Active,
@@ -658,19 +658,19 @@ where
         Ok(())
     }
 
-    fn manual_period_from_metadata(
+    fn one_time_period_from_metadata(
         metadata: &HashMap<String, String>,
         duration_days: i32,
     ) -> UseCaseResult<(DateTime<Utc>, DateTime<Utc>)> {
         let now = Utc::now();
         let starts_at = metadata
-            .get("manual_starts_at")
+            .get("one_time_starts_at")
             .and_then(|value| value.parse::<i64>().ok())
             .and_then(Self::ts_to_datetime)
             .unwrap_or(now);
 
         let ends_at = match metadata
-            .get("manual_ends_at")
+            .get("one_time_ends_at")
             .and_then(|value| value.parse::<i64>().ok())
             .and_then(Self::ts_to_datetime)
         {

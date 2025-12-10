@@ -56,7 +56,7 @@ CREATE TABLE "subscriptions" (
   "plan_id" uuid NOT NULL,
   "starts_at" timestamptz NOT NULL,
   "ends_at" timestamptz NOT NULL,
-  "billing_mode" TEXT NOT NULL CHECK ("billing_mode" IN ('recurring','manual')) DEFAULT 'recurring',
+  "billing_mode" TEXT NOT NULL CHECK ("billing_mode" IN ('recurring','one_time')) DEFAULT 'recurring',
   "default_payment_method_id" uuid,
   "cancel_at_period_end" BOOLEAN NOT NULL DEFAULT false,
   "canceled_at" timestamptz,
