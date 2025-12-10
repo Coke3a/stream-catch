@@ -14,7 +14,7 @@ Payments:
   - Stripe (Thailand) → PromptPay QR + Card
   
 Video Storage & Delivery:
-  - Backblaze B2 (private bucket + SSE-C AES256)
+  - Wasabi S3-compatible storage (private bucket + SSE-S3)
   - Cloudflare Free Plan (cache + Workers สำหรับ signed URL + entitlement check)
   - Lifecycle Rule: Delete after 30 days → storage ไม่เกิน 1 TB
   
@@ -22,4 +22,3 @@ Database:
   - PostgreSQL via Supabase (แนะนำตัวนี้มากกว่า Neon)
     ├── ฟรี tier: 500 MB storage, 5M row reads, connection pooling ในตัว
     └── pg-vector, auth, storage (ถ้าจะเก็บ poster.jpg ชั่วคราว)
-

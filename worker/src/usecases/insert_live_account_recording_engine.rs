@@ -6,7 +6,7 @@ use domain::{
     value_objects::enums::live_account_statuses::LiveAccountStatus,
 };
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 pub struct InsertLiveAccountUseCase {
@@ -19,7 +19,17 @@ impl InsertLiveAccountUseCase {
     }
 
     pub async fn get_unsynced_live_accounts(&self) -> Result<Vec<LiveAccountEntity>> {
-        let accounts = self.repository.find_unsynced_live_accounts().await?;
+        let accounts = self
+            .repository
+            .find_unsynced_live_accounts()
+            .await
+            .map_err(|err| {
+                error!(
+                    error = ?err,
+                    "recording_engine_web_driver: failed to fetch unsynced live accounts"
+                );
+                err
+            })?;
         Ok(accounts)
     }
 
@@ -29,6 +39,17 @@ impl InsertLiveAccountUseCase {
         status: LiveAccountStatus,
     ) -> Result<Uuid> {
         info!(live_account_id = %id, %status, "updating live account status");
-        self.repository.update_live_account_status(id, status).await
+        self.repository
+            .update_live_account_status(id, status.clone())
+            .await
+            .map_err(|err| {
+                error!(
+                    live_account_id = %id,
+                    %status,
+                    db_error = ?err,
+                    "recording_engine_web_driver: failed to update live account status"
+                );
+                err
+            })
     }
 }

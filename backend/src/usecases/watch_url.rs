@@ -12,7 +12,7 @@ use crates::domain::{
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::config::config_model::WatchUrl;
@@ -68,8 +68,24 @@ where
         let recording = self
             .recording_repository
             .find_recording_by_id(recording_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Recording not found"))?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %recording_id,
+                    db_error = ?err,
+                    "watch_url: failed to fetch recording by id"
+                );
+                err
+            })?
+            .ok_or_else(|| {
+                warn!(
+                    %user_id,
+                    %recording_id,
+                    "watch_url: recording not found"
+                );
+                anyhow::anyhow!("Recording not found")
+            })?;
 
         let features = self.effective_plan_features(user_id).await?;
 
@@ -82,6 +98,11 @@ where
         let base_url = self.config.base_url.trim_end_matches('/');
 
         if base_url.is_empty() {
+            error!(
+                %user_id,
+                %recording_id,
+                "watch_url: base URL is not configured"
+            );
             bail!("Watch URL base URL is not configured");
         }
 
@@ -104,19 +125,47 @@ where
             .live_following_repository
             .find_follow(user_id, recording.live_account_id)
             .await
-            .map_err(|_| anyhow::anyhow!("Follow is not active"))?;
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    live_account_id = %recording.live_account_id,
+                    db_error = ?err,
+                    "watch_url: failed to load follow status"
+                );
+                anyhow::anyhow!("Follow is not active")
+            })?;
 
         if follow.status != FollowStatus::Active.to_string() {
+            warn!(
+                %user_id,
+                live_account_id = %recording.live_account_id,
+                status = %follow.status,
+                "watch_url: follow is not active"
+            );
             bail!("Follow is not active");
         }
 
         let retention_days = features.retention_days.unwrap_or(0);
         if retention_days <= 0 {
+            warn!(
+                %user_id,
+                recording_id = %recording.id,
+                retention_days,
+                "watch_url: retention not configured for plan"
+            );
             bail!("Recording exceeds retention window");
         }
 
         let cutoff = Utc::now() - Duration::days(i64::from(retention_days));
         if recording.started_at < cutoff {
+            warn!(
+                %user_id,
+                recording_id = %recording.id,
+                started_at = %recording.started_at,
+                cutoff = %cutoff,
+                retention_days,
+                "watch_url: recording outside retention window"
+            );
             bail!("Recording exceeds retention window");
         }
 
@@ -127,7 +176,15 @@ where
         let plan = self
             .plan_resolver
             .resolve_effective_plan_for_user(user_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "watch_url: failed to resolve effective plan"
+                );
+                err
+            })?;
 
         Ok(plan.features)
     }
@@ -154,6 +211,15 @@ where
             &claims,
             &EncodingKey::from_secret(self.config.jwt_secret.as_bytes()),
         )
+        .map_err(|err| {
+            error!(
+                %user_id,
+                recording_id,
+                error = ?err,
+                "watch_url: failed to sign token"
+            );
+            err
+        })
         .context("failed to sign watch url token")
     }
 }

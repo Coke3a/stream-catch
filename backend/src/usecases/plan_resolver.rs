@@ -4,7 +4,7 @@ use crates::domain::{
     repositories::{plans::PlanRepository, subscriptions::SubscriptionRepository},
 };
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 /// Resolves the effective plan for a user: active paid subscription or free plan fallback.
@@ -35,18 +35,49 @@ where
         if let Some(subscription) = self
             .subscription_repo
             .find_current_active_non_free_subscription(user_id, self.free_plan_id)
-            .await?
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "plan_resolver: failed to load current subscription"
+                );
+                err
+            })?
         {
             debug!(
                 %user_id,
                 plan_id = %subscription.plan_id,
                 "plan_resolver: using active subscription plan"
             );
-            return self.plan_repo.find_by_id(subscription.plan_id).await;
+            return self
+                .plan_repo
+                .find_by_id(subscription.plan_id)
+                .await
+                .map_err(|err| {
+                    error!(
+                        %user_id,
+                        plan_id = %subscription.plan_id,
+                        db_error = ?err,
+                        "plan_resolver: failed to load plan by id"
+                    );
+                    err
+                });
         }
 
         debug!(%user_id, "plan_resolver: falling back to free plan");
-        self.plan_repo.find_by_id(self.free_plan_id).await
+        self.plan_repo
+            .find_by_id(self.free_plan_id)
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    plan_id = %self.free_plan_id,
+                    db_error = ?err,
+                    "plan_resolver: failed to load free plan"
+                );
+                err
+            })
     }
 }
 

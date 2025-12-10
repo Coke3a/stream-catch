@@ -14,8 +14,8 @@ use crates::infra::{
         },
     },
     storages::{
-        b2::B2StorageClient,
         supabase_storage::{SupabaseStorageClient, SupabaseStorageConfig},
+        wasabi::WasabiStorageClient,
     },
 };
 use std::sync::Arc;
@@ -107,8 +107,9 @@ async fn run() -> Result<()> {
     let recording_upload_repository: Arc<dyn RecordingUploadRepository + Send + Sync> =
         Arc::new(RecordingUploadPostgres::new(Arc::clone(&db_pool_arc)));
 
-    let video_storage_client_config = dotenvy_env.b2_storage.clone();
-    let video_storage_client = Arc::new(B2StorageClient::new(video_storage_client_config).await?);
+    let video_storage_client_config = dotenvy_env.video_storage.clone();
+    let video_storage_client =
+        Arc::new(WasabiStorageClient::new(video_storage_client_config).await?);
 
     // Spawn background loop
     let recording_uploading_loop = tokio::spawn(recording_uploading::worker::run(

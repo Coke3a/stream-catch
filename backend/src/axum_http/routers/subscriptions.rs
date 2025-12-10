@@ -34,6 +34,7 @@ use crates::{
     payments::stripe_client::StripeClient,
 };
 use std::sync::Arc;
+use tracing::info;
 
 type SubscriptionUseCaseState = SubscriptionUseCase<
     PlanPostgres,
@@ -106,8 +107,15 @@ where
     Inv: InvoiceRepository + Send + Sync + 'static,
     Stripe: StripeGateway + Send + Sync + 'static,
 {
+    info!("subscriptions: list_plans request received");
     match usecase.list_plans().await {
-        Ok(plans) => Json(plans).into_response(),
+        Ok(plans) => {
+            info!(
+                plan_count = plans.len(),
+                "subscriptions: list_plans returning plans"
+            );
+            Json(plans).into_response()
+        }
         Err(err) => map_error(err),
     }
 }
@@ -124,6 +132,7 @@ where
     Inv: InvoiceRepository + Send + Sync + 'static,
     Stripe: StripeGateway + Send + Sync + 'static,
 {
+    info!(%auth.user_id, "subscriptions: current subscription request received");
     match usecase.get_current_subscription(auth.user_id).await {
         Ok(Some(subscription)) => Json(subscription).into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -144,9 +153,23 @@ where
     Inv: InvoiceRepository + Send + Sync + 'static,
     Stripe: StripeGateway + Send + Sync + 'static,
 {
+    info!(
+        %auth.user_id,
+        plan_id = %body.plan_id,
+        billing_mode = %body.billing_mode,
+        payment_method = %body.payment_method,
+        "subscriptions: create checkout request received"
+    );
+
     let billing_mode = match BillingMode::from_str(&body.billing_mode) {
         Some(mode) => mode,
         None => {
+            info!(
+                %auth.user_id,
+                status = StatusCode::BAD_REQUEST.as_u16(),
+                billing_mode = %body.billing_mode,
+                "subscriptions: invalid billing_mode"
+            );
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
@@ -161,6 +184,12 @@ where
     let payment_method = match PaymentMethod::from_str(&body.payment_method) {
         Some(method) => method,
         None => {
+            info!(
+                %auth.user_id,
+                status = StatusCode::BAD_REQUEST.as_u16(),
+                payment_method = %body.payment_method,
+                "subscriptions: invalid payment_method"
+            );
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
@@ -182,7 +211,14 @@ where
         )
         .await
     {
-        Ok(url) => Json(CreateCheckoutResponse { checkout_url: url }).into_response(),
+        Ok(url) => {
+            info!(
+                %auth.user_id,
+                status = StatusCode::OK.as_u16(),
+                "subscriptions: checkout session created"
+            );
+            Json(CreateCheckoutResponse { checkout_url: url }).into_response()
+        }
         Err(err) => map_error(err),
     }
 }
@@ -199,8 +235,19 @@ where
     Inv: InvoiceRepository + Send + Sync + 'static,
     Stripe: StripeGateway + Send + Sync + 'static,
 {
+    info!(
+        %auth.user_id,
+        "subscriptions: cancel recurring subscription request received"
+    );
     match usecase.cancel_recurring_subscription(auth.user_id).await {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => {
+            info!(
+                %auth.user_id,
+                status = StatusCode::NO_CONTENT.as_u16(),
+                "subscriptions: cancel recurring subscription completed"
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(err) => map_error(err),
     }
 }
@@ -218,10 +265,19 @@ where
     Inv: InvoiceRepository + Send + Sync + 'static,
     Stripe: StripeGateway + Send + Sync + 'static,
 {
+    info!(
+        payload_len = payload.len(),
+        "subscriptions: stripe webhook request received"
+    );
+
     let signature = match headers.get("stripe-signature") {
         Some(value) => match value.to_str() {
             Ok(v) => v.to_string(),
             Err(_) => {
+                info!(
+                    status = StatusCode::BAD_REQUEST.as_u16(),
+                    "subscriptions: invalid stripe-signature header"
+                );
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
@@ -233,6 +289,10 @@ where
             }
         },
         None => {
+            info!(
+                status = StatusCode::BAD_REQUEST.as_u16(),
+                "subscriptions: missing stripe-signature header"
+            );
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {

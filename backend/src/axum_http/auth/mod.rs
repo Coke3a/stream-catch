@@ -7,6 +7,7 @@ use chrono::Utc;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use tracing::warn;
 
 use crate::config::config_loader;
 
@@ -77,12 +78,22 @@ where
         let auth_header = parts
             .headers
             .get(axum::http::header::AUTHORIZATION)
-            .ok_or((
-                StatusCode::UNAUTHORIZED,
-                "Missing Authorization header".to_string(),
-            ))?;
+            .ok_or_else(|| {
+                warn!(
+                    status = StatusCode::UNAUTHORIZED.as_u16(),
+                    "auth: missing Authorization header"
+                );
+                (
+                    StatusCode::UNAUTHORIZED,
+                    "Missing Authorization header".to_string(),
+                )
+            })?;
 
         let auth_str = auth_header.to_str().map_err(|_| {
+            warn!(
+                status = StatusCode::UNAUTHORIZED.as_u16(),
+                "auth: invalid Authorization header encoding"
+            );
             (
                 StatusCode::UNAUTHORIZED,
                 "Invalid Authorization header".to_string(),
@@ -91,6 +102,10 @@ where
 
         // 2. Expect "Bearer <token>"
         if !auth_str.starts_with("Bearer ") {
+            warn!(
+                status = StatusCode::UNAUTHORIZED.as_u16(),
+                "auth: Authorization header missing Bearer prefix"
+            );
             return Err((
                 StatusCode::UNAUTHORIZED,
                 "Invalid Authorization header format".to_string(),
@@ -101,10 +116,21 @@ where
 
         // 3. Validate JWT
         let claims = validate_supabase_jwt(token)
-            .map_err(|e| (StatusCode::UNAUTHORIZED, e.0.to_string()))?;
+            .map_err(|e| {
+                warn!(
+                    status = StatusCode::UNAUTHORIZED.as_u16(),
+                    error = %e.0,
+                    "auth: JWT validation failed"
+                );
+                (StatusCode::UNAUTHORIZED, e.0.to_string())
+            })?;
 
         // 4. Parse sub to Uuid
         let user_id = Uuid::parse_str(&claims.sub).map_err(|_| {
+            warn!(
+                status = StatusCode::UNAUTHORIZED.as_u16(),
+                "auth: invalid user_id in token"
+            );
             (
                 StatusCode::UNAUTHORIZED,
                 "Invalid user ID in token".to_string(),

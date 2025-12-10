@@ -25,7 +25,7 @@ use crates::{
 };
 use serde::Deserialize;
 use thiserror::Error;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[cfg_attr(test, mockall::automock)]
@@ -157,7 +157,17 @@ where
     }
 
     pub async fn list_plans(&self) -> UseCaseResult<Vec<PlanDto>> {
-        let plans = self.plan_repo.list_active_plans().await?;
+        info!("subscriptions: listing active plans");
+        let plans = self
+            .plan_repo
+            .list_active_plans()
+            .await
+            .map_err(|err| {
+                error!(db_error = ?err, "subscriptions: failed to list active plans");
+                SubscriptionError::Internal(err)
+            })?;
+        let plan_count = plans.len();
+        info!(plan_count, "subscriptions: active plans loaded");
         Ok(plans.into_iter().map(PlanDto::from).collect())
     }
 
@@ -165,19 +175,43 @@ where
         &self,
         user_id: Uuid,
     ) -> UseCaseResult<Option<CurrentSubscriptionDto>> {
+        info!(
+            %user_id,
+            "subscriptions: loading current subscription for user"
+        );
         let subscription = match self
             .subscription_repo
             .find_current_active_non_free_subscription(user_id, self.free_plan_id)
-            .await?
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load current subscription"
+                );
+                SubscriptionError::Internal(err)
+            })?
         {
             Some(sub) => sub,
-            None => return Ok(None),
+            None => {
+                info!(%user_id, "subscriptions: no active subscription");
+                return Ok(None);
+            }
         };
 
         let plan = self
             .plan_repo
             .find_active_plan_by_id(subscription.plan_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    plan_id = %subscription.plan_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load active plan"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         Ok(Some(CurrentSubscriptionDto {
             plan_id: plan.id,
@@ -199,19 +233,66 @@ where
         billing_mode: BillingMode,
         payment_method: PaymentMethod,
     ) -> UseCaseResult<String> {
-        let email = user_email.ok_or(SubscriptionError::MissingEmail)?;
+        info!(
+            %user_id,
+            %plan_id,
+            billing_mode = %billing_mode,
+            payment_method = %payment_method,
+            "subscriptions: create checkout session requested"
+        );
+
+        let email = match user_email {
+            Some(value) => value,
+            None => {
+                let err = SubscriptionError::MissingEmail;
+                warn!(
+                    %user_id,
+                    %plan_id,
+                    status = err.status_code().as_u16(),
+                    "subscriptions: missing email for checkout"
+                );
+                return Err(err);
+            }
+        };
 
         if plan_id == self.free_plan_id {
-            return Err(SubscriptionError::InvalidCombination(
+            let err = SubscriptionError::InvalidCombination(
                 "free plan does not require checkout".to_string(),
-            ));
+            );
+            warn!(
+                %user_id,
+                %plan_id,
+                status = err.status_code().as_u16(),
+                "subscriptions: free plan checkout attempted"
+            );
+            return Err(err);
         }
 
-        let plan = self.plan_repo.find_active_plan_by_id(plan_id).await?;
+        let plan = self
+            .plan_repo
+            .find_active_plan_by_id(plan_id)
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %plan_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load plan for checkout"
+                );
+                SubscriptionError::Internal(err)
+            })?;
         let current_subscription = self
             .subscription_repo
             .find_current_active_non_free_subscription(user_id, self.free_plan_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load current subscription before checkout"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         if let Some(current_subscription) = current_subscription.as_ref() {
             let current_billing_mode = BillingMode::from_str(&current_subscription.billing_mode)
@@ -237,11 +318,29 @@ where
 
                 self.stripe_client
                     .cancel_subscription(&provider_subscription_id)
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %provider_subscription_id,
+                            error = ?err,
+                            "subscriptions: failed to cancel provider subscription before checkout"
+                        );
+                        err
+                    })?;
 
                 self.subscription_repo
                     .cancel_recurring_subscription(user_id)
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %provider_subscription_id,
+                            db_error = ?err,
+                            "subscriptions: failed to mark recurring subscription canceled"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
             }
         }
 
@@ -278,7 +377,16 @@ where
         let customer_id = self
             .customer_repo
             .find_or_create_stripe_customer_id(user_id, &email)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %plan_id,
+                    error = ?err,
+                    "subscriptions: failed to resolve stripe customer id"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         let mut metadata = HashMap::from([
             ("user_id".to_string(), user_id.to_string()),
@@ -309,6 +417,9 @@ where
             %plan_id,
             billing_mode = %billing_mode,
             payment_method = %payment_method,
+            metadata = ?metadata,
+            price_id = %price_id,
+            customer_id = %customer_id,
             "subscriptions: creating checkout session"
         );
 
@@ -318,10 +429,30 @@ where
                 &price_id,
                 mode,
                 payment_method_types,
-                Some(customer_id),
+                Some(customer_id.clone()),
                 metadata,
             )
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %plan_id,
+                    price_id = %price_id,
+                    billing_mode = %billing_mode,
+                    payment_method = %payment_method,
+                    customer_id = %customer_id,
+                    error = ?err,
+                    "subscriptions: stripe checkout session creation failed"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        info!(
+            %user_id,
+            %plan_id,
+            checkout_url = %checkout_url,
+            "subscriptions: checkout session created successfully"
+        );
 
         Ok(checkout_url)
     }
@@ -331,15 +462,25 @@ where
         payload: &[u8],
         signature: &str,
     ) -> UseCaseResult<()> {
+        info!(
+            payload = %String::from_utf8_lossy(payload),
+            signature,
+            "subscriptions: stripe webhook payload received"
+        );
         let event = self
             .stripe_client
             .verify_webhook_signature(payload, signature)
             .map_err(|err| {
-                error!("stripe webhook verification failed: {err}");
+                warn!(
+                    error = %err,
+                    status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
+                    "stripe webhook verification failed"
+                );
                 SubscriptionError::InvalidWebhook("signature verification failed".into())
             })?;
 
         let event_type = event.type_.clone();
+        info!(event_type = %event_type, "subscriptions: stripe webhook verified");
 
         match event_type.as_str() {
             "checkout.session.completed" => {
@@ -368,30 +509,85 @@ where
         let subscription = self
             .subscription_repo
             .find_current_active_non_free_subscription(user_id, self.free_plan_id)
-            .await?
-            .ok_or(SubscriptionError::SubscriptionNotFound)?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load current subscription for cancel"
+                );
+                SubscriptionError::Internal(err)
+            })?
+            .ok_or_else(|| {
+                let err = SubscriptionError::SubscriptionNotFound;
+                warn!(
+                    %user_id,
+                    status = err.status_code().as_u16(),
+                    "subscriptions: no active recurring subscription to cancel"
+                );
+                err
+            })?;
 
         let billing_mode =
             BillingMode::from_str(&subscription.billing_mode).unwrap_or(BillingMode::Recurring);
         if billing_mode != BillingMode::Recurring {
-            return Err(SubscriptionError::InvalidCombination(
+            let err = SubscriptionError::InvalidCombination(
                 "only recurring subscriptions can be canceled".to_string(),
-            ));
+            );
+            warn!(
+                %user_id,
+                status = err.status_code().as_u16(),
+                billing_mode = %subscription.billing_mode,
+                "subscriptions: attempted to cancel non-recurring subscription"
+            );
+            return Err(err);
         }
 
         let provider_subscription_id = subscription
             .provider_subscription_id
             .clone()
-            .ok_or(SubscriptionError::SubscriptionNotFound)?;
+            .ok_or_else(|| {
+                let err = SubscriptionError::SubscriptionNotFound;
+                warn!(
+                    %user_id,
+                    status = err.status_code().as_u16(),
+                    "subscriptions: recurring subscription missing provider id"
+                );
+                err
+            })?;
 
         info!(%user_id, "subscriptions: canceling recurring subscription at Stripe");
         self.stripe_client
             .cancel_subscription(&provider_subscription_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %provider_subscription_id,
+                    error = ?err,
+                    "subscriptions: stripe cancel subscription failed"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         self.subscription_repo
             .cancel_recurring_subscription(user_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %provider_subscription_id,
+                    db_error = ?err,
+                    "subscriptions: failed to mark recurring subscription canceled"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        info!(
+            %user_id,
+            %provider_subscription_id,
+            "subscriptions: recurring subscription cancellation completed"
+        );
 
         Ok(())
     }
@@ -404,62 +600,161 @@ where
         match billing_mode {
             BillingMode::Recurring => {
                 if payment_method != PaymentMethod::Card {
-                    return Err(SubscriptionError::InvalidCombination(
+                    let err = SubscriptionError::InvalidCombination(
                         "recurring billing is card-only".to_string(),
-                    ));
+                    );
+                    warn!(
+                        status = err.status_code().as_u16(),
+                        billing_mode = %billing_mode,
+                        payment_method = %payment_method,
+                        "subscriptions: invalid recurring payment combination"
+                    );
+                    return Err(err);
                 }
-                plan.stripe_price_recurring
+                plan
+                    .stripe_price_recurring
                     .clone()
-                    .ok_or(SubscriptionError::MissingPrice("stripe_price_recurring"))
+                    .ok_or_else(|| {
+                        let err = SubscriptionError::MissingPrice("stripe_price_recurring");
+                        warn!(
+                            status = err.status_code().as_u16(),
+                            plan_id = %plan.id,
+                            "subscriptions: missing recurring price"
+                        );
+                        err
+                    })
             }
             BillingMode::OneTime => {
                 match payment_method {
-                    PaymentMethod::Card => plan.stripe_price_one_time_card.clone().ok_or(
-                        SubscriptionError::MissingPrice("stripe_price_one_time_card"),
-                    ),
-                    PaymentMethod::PromptPay => plan.stripe_price_one_time_promptpay.clone().ok_or(
-                        SubscriptionError::MissingPrice("stripe_price_one_time_promptpay"),
-                    ),
+                    PaymentMethod::Card => plan
+                        .stripe_price_one_time_card
+                        .clone()
+                        .ok_or_else(|| {
+                            let err = SubscriptionError::MissingPrice(
+                                "stripe_price_one_time_card",
+                            );
+                            warn!(
+                                status = err.status_code().as_u16(),
+                                plan_id = %plan.id,
+                                "subscriptions: missing one-time card price"
+                            );
+                            err
+                        }),
+                    PaymentMethod::PromptPay => plan
+                        .stripe_price_one_time_promptpay
+                        .clone()
+                        .ok_or_else(|| {
+                            let err = SubscriptionError::MissingPrice(
+                                "stripe_price_one_time_promptpay",
+                            );
+                            warn!(
+                                status = err.status_code().as_u16(),
+                                plan_id = %plan.id,
+                                "subscriptions: missing promptpay price"
+                            );
+                            err
+                        }),
                 }
             }
         }
     }
 
     async fn handle_checkout_completed(&self, event: &StripeEvent) -> UseCaseResult<()> {
+        info!(
+            event_type = %event.type_,
+            payload = ?event.data.object,
+            "subscriptions: processing checkout completed webhook"
+        );
         let session = StripeClient::extract_checkout_session(&event).ok_or_else(|| {
-            SubscriptionError::InvalidWebhook("missing checkout session".to_string())
+            let err = SubscriptionError::InvalidWebhook("missing checkout session".to_string());
+            warn!(
+                status = err.status_code().as_u16(),
+                "subscriptions: checkout session missing in webhook"
+            );
+            err
         })?;
 
         let metadata = session
             .metadata
             .clone()
-            .ok_or_else(|| SubscriptionError::InvalidWebhook("missing metadata".to_string()))?;
+            .ok_or_else(|| {
+                let err = SubscriptionError::InvalidWebhook("missing metadata".to_string());
+                warn!(
+                    status = err.status_code().as_u16(),
+                    "subscriptions: missing metadata on checkout session"
+                );
+                err
+            })?;
 
         let user_id = metadata
             .get("user_id")
             .and_then(|v| Uuid::parse_str(v).ok())
-            .ok_or_else(|| SubscriptionError::InvalidWebhook("missing user_id".to_string()))?;
+            .ok_or_else(|| {
+                let err = SubscriptionError::InvalidWebhook("missing user_id".to_string());
+                warn!(
+                    status = err.status_code().as_u16(),
+                    "subscriptions: missing user_id in checkout metadata"
+                );
+                err
+            })?;
         let plan_id = metadata
             .get("plan_id")
             .and_then(|v| Uuid::parse_str(v).ok())
-            .ok_or_else(|| SubscriptionError::InvalidWebhook("missing plan_id".to_string()))?;
+            .ok_or_else(|| {
+                let err = SubscriptionError::InvalidWebhook("missing plan_id".to_string());
+                warn!(
+                    %user_id,
+                    status = err.status_code().as_u16(),
+                    "subscriptions: missing plan_id in checkout metadata"
+                );
+                err
+            })?;
         let payment_method = metadata
             .get("payment_method")
             .and_then(|v| PaymentMethod::from_str(v))
             .unwrap_or(PaymentMethod::Card);
 
         if plan_id == self.free_plan_id {
-            return Err(SubscriptionError::InvalidWebhook(
+            let err = SubscriptionError::InvalidWebhook(
                 "free plan cannot be purchased".to_string(),
-            ));
+            );
+            warn!(
+                %user_id,
+                %plan_id,
+                status = err.status_code().as_u16(),
+                "subscriptions: free plan cannot be purchased from webhook"
+            );
+            return Err(err);
         }
 
-        let plan = self.plan_repo.find_active_plan_by_id(plan_id).await?;
+        let plan = self
+            .plan_repo
+            .find_active_plan_by_id(plan_id)
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    %plan_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load plan during webhook"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         if let Some(customer) = session.customer.as_deref() {
             self.customer_repo
                 .upsert_customer_ref(user_id, "stripe", customer)
-                .await?;
+                .await
+                .map_err(|err| {
+                    error!(
+                        %user_id,
+                        %plan_id,
+                        customer_id = customer,
+                        db_error = ?err,
+                        "subscriptions: failed to upsert stripe customer ref"
+                    );
+                    SubscriptionError::Internal(err)
+                })?;
         }
 
         let provider_session_ref = session.id.clone().unwrap_or_default();
@@ -473,10 +768,27 @@ where
                     )
                 })?;
 
+                info!(
+                    %user_id,
+                    %plan_id,
+                    %subscription_id,
+                    "subscriptions: retrieving subscription from stripe"
+                );
+
                 let subscription = self
                     .stripe_client
                     .retrieve_subscription(&subscription_id)
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            %subscription_id,
+                            error = ?err,
+                            "subscriptions: failed to retrieve subscription from stripe"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
 
                 let starts_at = Self::ts_to_datetime(subscription.current_period_start)
                     .ok_or_else(|| {
@@ -491,6 +803,15 @@ where
                         )
                     })?;
 
+                info!(
+                    %user_id,
+                    %plan_id,
+                    %subscription_id,
+                    period_start = subscription.current_period_start,
+                    period_end = subscription.current_period_end,
+                    "subscriptions: stripe subscription retrieved"
+                );
+
                 self.subscription_repo
                     .create_or_update_subscription_after_checkout(
                         user_id,
@@ -501,7 +822,17 @@ where
                         SubscriptionStatus::Active,
                         Some(subscription_id.clone()),
                     )
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            %subscription_id,
+                            db_error = ?err,
+                            "subscriptions: failed to upsert subscription after checkout"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
 
                 let invoice_id = self
                     .invoice_repo
@@ -516,7 +847,17 @@ where
                         status: "paid".to_string(),
                         paid_at: Some(Utc::now()),
                     })
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            %subscription_id,
+                            db_error = ?err,
+                            "subscriptions: failed to create invoice after subscription checkout"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
 
                 self.payment_repo
                     .record_payment(crates::domain::entities::payments::NewPaymentEntity {
@@ -531,7 +872,24 @@ where
                         provider_session_ref: Some(provider_session_ref),
                         error: None,
                     })
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            %subscription_id,
+                            db_error = ?err,
+                            "subscriptions: failed to record payment for subscription checkout"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
+
+                info!(
+                    %user_id,
+                    %plan_id,
+                    %subscription_id,
+                    "subscriptions: processed subscription checkout webhook"
+                );
             }
             Some("payment") => {
                 let (starts_at, ends_at) =
@@ -547,7 +905,16 @@ where
                         SubscriptionStatus::Active,
                         None,
                     )
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            db_error = ?err,
+                            "subscriptions: failed to upsert one-time subscription after checkout"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
 
                 let invoice_id = self
                     .invoice_repo
@@ -562,7 +929,16 @@ where
                         status: "paid".to_string(),
                         paid_at: Some(Utc::now()),
                     })
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            db_error = ?err,
+                            "subscriptions: failed to create invoice for one-time checkout"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
 
                 let amount_minor = session
                     .amount_total
@@ -582,9 +958,34 @@ where
                         provider_session_ref: Some(provider_session_ref),
                         error: None,
                     })
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            %plan_id,
+                            db_error = ?err,
+                            "subscriptions: failed to record payment for one-time checkout"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
+
+                info!(
+                    %user_id,
+                    %plan_id,
+                    "subscriptions: processed one-time checkout webhook"
+                );
             }
             _ => {
+                let err = SubscriptionError::InvalidWebhook(
+                    "unknown checkout session mode".to_string(),
+                );
+                warn!(
+                    %user_id,
+                    %plan_id,
+                    status = err.status_code().as_u16(),
+                    mode = ?session.mode,
+                    "subscriptions: unknown checkout session mode"
+                );
                 return Err(SubscriptionError::InvalidWebhook(
                     "unknown checkout session mode".to_string(),
                 ));
@@ -602,12 +1003,21 @@ where
 
         let subscription: SubscriptionObject = serde_json::from_value(event.data.object.clone())
             .map_err(|err| {
-                error!("failed to parse subscription object from webhook: {err}");
+                warn!(
+                    error = %err,
+                    status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
+                    "subscriptions: invalid subscription payload in webhook"
+                );
                 SubscriptionError::InvalidWebhook("invalid subscription payload".to_string())
             })?;
 
         let subscription_id = subscription.id.ok_or_else(|| {
-            SubscriptionError::InvalidWebhook("missing subscription id".to_string())
+            let err = SubscriptionError::InvalidWebhook("missing subscription id".to_string());
+            warn!(
+                status = err.status_code().as_u16(),
+                "subscriptions: subscription id missing in webhook payload"
+            );
+            err
         })?;
 
         info!(
@@ -620,7 +1030,15 @@ where
                 &subscription_id,
                 SubscriptionStatus::Expired,
             )
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    subscription_id = %subscription_id,
+                    db_error = ?err,
+                    "subscriptions: failed to update subscription status from webhook"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         Ok(())
     }
@@ -637,12 +1055,22 @@ where
 
         let invoice: InvoiceObject =
             serde_json::from_value(event.data.object.clone()).map_err(|err| {
-                error!("failed to parse invoice object from webhook: {err}");
+                warn!(
+                    error = %err,
+                    status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
+                    "subscriptions: invalid invoice payload in webhook"
+                );
                 SubscriptionError::InvalidWebhook("invalid invoice payload".to_string())
             })?;
 
         let subscription_id = invoice.subscription.ok_or_else(|| {
-            SubscriptionError::InvalidWebhook("invoice missing subscription id".to_string())
+            let err =
+                SubscriptionError::InvalidWebhook("invoice missing subscription id".to_string());
+            warn!(
+                status = err.status_code().as_u16(),
+                "subscriptions: invoice webhook missing subscription id"
+            );
+            err
         })?;
 
         info!(
@@ -653,7 +1081,15 @@ where
 
         self.subscription_repo
             .update_status_by_provider_subscription_id(&subscription_id, status)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    subscription_id = %subscription_id,
+                    db_error = ?err,
+                    "subscriptions: failed to update subscription status from invoice webhook"
+                );
+                SubscriptionError::Internal(err)
+            })?;
 
         Ok(())
     }

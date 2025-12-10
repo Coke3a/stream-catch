@@ -7,37 +7,48 @@ use crates::domain::{
     value_objects::recording_upload::RecordingUploadPayload,
 };
 use std::{path::PathBuf, sync::Arc, time::Duration};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub async fn run(
     job_repo: Arc<dyn JobRepository + Send + Sync>,
     recording_repo: Arc<dyn RecordingUploadRepository + Send + Sync>,
     storage: Arc<dyn StorageClient + Send + Sync>,
 ) -> Result<()> {
-    info!("Starting RecordingUpload worker loop");
+    info!("recording_upload: starting worker loop");
     loop {
         match job_repo.lock_next_recording_upload_job().await {
             Ok(Some(job)) => {
-                info!("Processing RecordingUpload job: {}", job.id);
+                info!(job_id = %job.id, "recording_upload: processing job");
                 if let Err(e) =
                     process_recording_upload_job(&job_repo, &recording_repo, &storage, &job).await
                 {
-                    error!("Failed to process job {}: {}", job.id, e);
+                    error!(
+                        job_id = %job.id,
+                        error = %e,
+                        "recording_upload: failed to process job"
+                    );
                     if let Err(mark_err) = job_repo
                         .mark_job_failed(job.id, &e.to_string(), 5) // MAX_ATTEMPTS = 5
                         .await
                     {
-                        error!("Failed to mark job {} as failed: {}", job.id, mark_err);
+                        error!(
+                            job_id = %job.id,
+                            error = %mark_err,
+                            "recording_upload: failed to mark job as failed"
+                        );
                     }
                 } else {
-                    info!("Successfully processed job: {}", job.id);
+                    info!(job_id = %job.id, "recording_upload: job processed successfully");
                 }
             }
             Ok(None) => {
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
             Err(e) => {
-                error!("Error locking next job: {}", e);
+                error!(
+                    error = %e,
+                    "recording_upload: error locking next job"
+                );
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
         }
@@ -52,17 +63,66 @@ async fn process_recording_upload_job(
 ) -> Result<()> {
     let payload: RecordingUploadPayload = serde_json::from_value(job.payload.clone())?;
 
-    let local_path = canonicalize_path(&payload.local_path)?;
+    let local_path = canonicalize_path(&payload.local_path).map_err(|err| {
+        error!(
+            job_id = %job.id,
+            path = %payload.local_path,
+            error = %err,
+            "recording_upload: failed to canonicalize path"
+        );
+        err
+    })?;
     let local_path_str = local_path.to_string_lossy().into_owned();
 
     let recording = recording_repo
         .find_recording_by_id(payload.recording_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("recording not found"))?;
+        .await
+        .map_err(|err| {
+            error!(
+                job_id = %job.id,
+                recording_id = %payload.recording_id,
+                db_error = %err,
+                "recording_upload: failed to fetch recording"
+            );
+            err
+        })?
+        .ok_or_else(|| {
+            warn!(
+                job_id = %job.id,
+                recording_id = %payload.recording_id,
+                "recording_upload: recording not found"
+            );
+            anyhow::anyhow!("recording not found")
+        })?;
 
+    info!(
+        job_id = %job.id,
+        recording_id = %recording.id,
+        path = %local_path_str,
+        "recording_upload: starting upload to storage"
+    );
     let upload_result = storage
         .upload_recording(&local_path_str, &recording)
-        .await?;
+        .await
+        .map_err(|err| {
+            error!(
+                job_id = %job.id,
+                recording_id = %recording.id,
+                path = %local_path_str,
+                error = %err,
+                "recording_upload: storage upload failed"
+            );
+            err
+        })?;
+
+    info!(
+        job_id = %job.id,
+        recording_id = %recording.id,
+        remote_prefix = %upload_result.remote_prefix,
+        size_bytes = upload_result.size_bytes,
+        duration_sec = upload_result.duration_sec,
+        "recording_upload: storage upload completed"
+    );
 
     recording_repo
         .mark_recording_ready(
@@ -71,9 +131,25 @@ async fn process_recording_upload_job(
             upload_result.size_bytes,
             upload_result.duration_sec,
         )
-        .await?;
+        .await
+        .map_err(|err| {
+            error!(
+                job_id = %job.id,
+                recording_id = %recording.id,
+                db_error = %err,
+                "recording_upload: failed to mark recording ready"
+            );
+            err
+        })?;
 
-    job_repo.mark_job_done(job.id).await?;
+    job_repo.mark_job_done(job.id).await.map_err(|err| {
+        error!(
+            job_id = %job.id,
+            error = %err,
+            "recording_upload: failed to mark job done"
+        );
+        err
+    })?;
 
     Ok(())
 }

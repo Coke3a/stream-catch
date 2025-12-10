@@ -2,7 +2,7 @@ use crate::config::stage::Stage;
 
 use super::config_model::{Database, DotEnvyConfig, Supabase, WorkerServer};
 use anyhow::Result;
-use crates::infra::storages::b2::B2StorageConfig;
+use crates::infra::storages::wasabi::WasabiStorageConfig;
 
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
@@ -45,21 +45,26 @@ pub fn load() -> Result<DotEnvyConfig> {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
     };
 
-    let b2_storage = B2StorageConfig {
-        endpoint: std::env::var("B2_ENDPOINT").expect("B2_ENDPOINT is invalid"),
-        region: std::env::var("B2_REGION").expect("B2_REGION is invalid"),
-        bucket: std::env::var("B2_BUCKET").expect("B2_BUCKET is invalid"),
-        key_id: std::env::var("B2_KEY_ID").expect("B2_KEY_ID is invalid"),
-        application_key: std::env::var("B2_APPLICATION_KEY")
-            .expect("B2_APPLICATION_KEY is invalid"),
-        key_prefix: std::env::var("B2_KEY_PREFIX").unwrap_or_else(|_| "recordings".to_string()),
+    let video_storage = WasabiStorageConfig {
+        endpoint: std::env::var("VIDEO_STORAGE_S3_ENDPOINT")
+            .expect("VIDEO_STORAGE_S3_ENDPOINT is invalid"),
+        region: std::env::var("VIDEO_STORAGE_S3_REGION")
+            .expect("VIDEO_STORAGE_S3_REGION is invalid"),
+        bucket: std::env::var("VIDEO_STORAGE_S3_BUCKET")
+            .expect("VIDEO_STORAGE_S3_BUCKET is invalid"),
+        access_key_id: std::env::var("VIDEO_STORAGE_S3_ACCESS_KEY_ID")
+            .expect("VIDEO_STORAGE_S3_ACCESS_KEY_ID is invalid"),
+        secret_access_key: std::env::var("VIDEO_STORAGE_S3_SECRET_ACCESS_KEY")
+            .expect("VIDEO_STORAGE_S3_SECRET_ACCESS_KEY is invalid"),
+        key_prefix: std::env::var("VIDEO_STORAGE_S3_KEY_PREFIX")
+            .unwrap_or_else(|_| "recordings".to_string()),
     };
 
     Ok(DotEnvyConfig {
         worker_server,
         database,
         supabase,
-        b2_storage,
+        video_storage,
     })
 }
 

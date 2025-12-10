@@ -25,7 +25,7 @@ use crates::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, info};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -73,9 +73,21 @@ where
     P: PlanRepository + Send + Sync + 'static,
     S: SubscriptionRepository + Send + Sync + 'static,
 {
+    info!(
+        %user_id,
+        recording_id = %query.recording_id,
+        "watch_url: request received"
+    );
+
     let recording_id = match Uuid::parse_str(&query.recording_id) {
         Ok(id) => id,
         Err(_) => {
+            info!(
+                %user_id,
+                raw_recording_id = %query.recording_id,
+                status = StatusCode::BAD_REQUEST.as_u16(),
+                "watch_url: invalid recording_id format"
+            );
             return (
                 StatusCode::BAD_REQUEST,
                 "Invalid recording_id format".to_string(),
@@ -85,7 +97,15 @@ where
     };
 
     match usecase.generate_watch_url(user_id, recording_id).await {
-        Ok(url) => (StatusCode::OK, Json(WatchUrlResponse { url })).into_response(),
+        Ok(url) => {
+            info!(
+                %user_id,
+                %recording_id,
+                status = StatusCode::OK.as_u16(),
+                "watch_url: generated url successfully"
+            );
+            (StatusCode::OK, Json(WatchUrlResponse { url })).into_response()
+        }
         Err(err) => {
             let message = err.to_string();
             let status = if message.contains("Recording not found") {
@@ -106,6 +126,14 @@ where
                     "watch_url: failed to generate url"
                 );
             }
+
+            info!(
+                %user_id,
+                %recording_id,
+                status = status.as_u16(),
+                error = %message,
+                "watch_url: request completed with error"
+            );
 
             (status, message).into_response()
         }

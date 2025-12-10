@@ -1,11 +1,11 @@
-use crates::infra::storages::b2::B2StorageConfig;
+use crates::infra::storages::wasabi::WasabiStorageConfig;
 
 #[derive(Debug, Clone)]
 pub struct DotEnvyConfig {
     pub worker_server: WorkerServer,
     pub database: Database,
     pub supabase: Supabase,
-    pub b2_storage: B2StorageConfig,
+    pub video_storage: WasabiStorageConfig,
 }
 
 #[derive(Debug, Clone)]

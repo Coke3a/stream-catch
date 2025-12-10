@@ -12,7 +12,7 @@ use domain::value_objects::recording_engine_webhook::{
     RecordingEngineFileFinishWebhook, RecordingEngineLiveStartWebhook,
     RecordingEngineTransmuxFinishWebhook,
 };
-use tracing::error;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::usecases::recording_engine_webhook::RecordingEngineWebhookUseCase;
@@ -29,6 +29,10 @@ pub async fn live_start(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineLiveStartWebhook>,
 ) -> Response {
+    info!(
+        payload = ?payload,
+        "recording_engine_webhook: live_start received"
+    );
     match usecase.handle_live_start(payload).await {
         Ok(recording_id) => success_response(recording_id),
         Err(err) => map_error("live_start", err),
@@ -39,6 +43,10 @@ pub async fn video_transmux_finish(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineTransmuxFinishWebhook>,
 ) -> Response {
+    info!(
+        payload = ?payload,
+        "recording_engine_webhook: video_transmux_finish received"
+    );
     match usecase.handle_transmux_finish(payload).await {
         Ok(recording_id) => success_response(recording_id),
         Err(err) => map_error("video_transmux_finish", err),
@@ -49,6 +57,10 @@ pub async fn video_uploading(
     State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
     Json(payload): Json<RecordingEngineFileFinishWebhook>,
 ) -> Response {
+    info!(
+        payload = ?payload,
+        "recording_engine_webhook: video_uploading received"
+    );
     match usecase
         .handle_uploading_status(payload.data.platform.clone(), payload.data.channel.clone())
         .await
@@ -72,6 +84,11 @@ fn map_error(label: &str, err: anyhow::Error) -> Response {
         StatusCode::INTERNAL_SERVER_ERROR
     };
 
-    error!("{label} webhook failed: {message}");
+    error!(
+        status = status.as_u16(),
+        error = %message,
+        "recording_engine_webhook: {} webhook failed",
+        label
+    );
     (status, message).into_response()
 }

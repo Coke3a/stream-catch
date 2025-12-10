@@ -14,7 +14,7 @@ use domain::{
         platforms::Platform,
     },
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct LiveFollowingUseCase<L, P, S>
 where
@@ -42,8 +42,26 @@ where
     pub async fn follow(&self, user_id: Uuid, insert_url: String) -> Result<()> {
         info!(%user_id, url = %insert_url, "live_following: follow requested");
 
-        let url = url::Url::parse(&insert_url)?;
-        let (platform, account_id) = Self::parse_platform_and_account_id(&url)?;
+        let url = url::Url::parse(&insert_url).map_err(|err| {
+            warn!(
+                %user_id,
+                url = %insert_url,
+                error = %err,
+                status = axum::http::StatusCode::BAD_REQUEST.as_u16(),
+                "live_following: invalid follow URL"
+            );
+            err
+        })?;
+        let (platform, account_id) = Self::parse_platform_and_account_id(&url).map_err(|err| {
+            warn!(
+                %user_id,
+                url = %insert_url,
+                error = %err,
+                status = axum::http::StatusCode::BAD_REQUEST.as_u16(),
+                "live_following: unsupported platform or account id"
+            );
+            err
+        })?;
         debug!(platform = %platform, account_id, "live_following: parsed platform/account");
 
         let find_live_account_model = domain::value_objects::live_following::FindLiveAccountModel {
@@ -82,7 +100,9 @@ where
                     // Already active → return error
                     Ok(existing_follow) if existing_follow.status == active_status => {
                         warn!(
+                            %user_id,
                             follow_status = existing_follow.status,
+                            status = axum::http::StatusCode::CONFLICT.as_u16(),
                             "live_following: follow already active"
                         );
                         return Err(anyhow::anyhow!("Follow already exists"));
@@ -93,13 +113,30 @@ where
                         info!("live_following: reactivating existing follow");
                         self.live_following_repository
                             .to_active(user_id, live_account.id)
-                            .await?;
+                            .await
+                            .map_err(|err| {
+                                error!(
+                                    %user_id,
+                                    live_account_id = %live_account.id,
+                                    db_error = ?err,
+                                    "live_following: failed to reactivate follow"
+                                );
+                                err
+                            })?;
                         return Ok(());
                     }
 
                     // Not found or other error → continue to create new follow
-                    Ok(_) | Err(_) => {
+                    Ok(_) => {
                         debug!("live_following: no reusable follow found, creating new follow");
+                    }
+                    Err(err) => {
+                        error!(
+                            %user_id,
+                            live_account_id = %live_account.id,
+                            db_error = ?err,
+                            "live_following: failed to load follow state, creating new follow"
+                        );
                     }
                 }
 
@@ -114,7 +151,16 @@ where
 
                 self.live_following_repository
                     .follow(insert_follow_entity)
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            live_account_id = %live_account.id,
+                            db_error = ?err,
+                            "live_following: failed to create follow for existing live account"
+                        );
+                        err
+                    })?;
 
                 info!("live_following: follow created for existing live account");
             }
@@ -122,7 +168,14 @@ where
             // ─────────────────────────────────────────────
             // Case 2: live account does NOT exist → create both
             // ─────────────────────────────────────────────
-            Err(_) => {
+            Err(err) => {
+                error!(
+                    %user_id,
+                    platform = %platform,
+                    account_id,
+                    db_error = ?err,
+                    "live_following: failed to find live account, proceeding to create new"
+                );
                 info!(
                     platform = %platform,
                     account_id,
@@ -132,7 +185,7 @@ where
                 let insert_live_account_entity =
                     domain::entities::live_accounts::InsertLiveAccountEntity {
                         platform: platform.to_string(),
-                        account_id,
+                        account_id: account_id.clone(),
                         canonical_url: insert_url,
                         status: LiveAccountStatus::Unsynced.to_string(),
                         created_at: now,
@@ -152,7 +205,17 @@ where
                         insert_follow_entity,
                         insert_live_account_entity,
                     )
-                    .await?;
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            %user_id,
+                            platform = %platform,
+                            account_id,
+                            db_error = ?err,
+                            "live_following: failed to create live account/follow"
+                        );
+                        err
+                    })?;
 
                 info!("live_following: new live account and follow created");
             }
@@ -166,17 +229,40 @@ where
         let plan = self
             .plan_resolver
             .resolve_effective_plan_for_user(user_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "live_following: failed to resolve plan while checking quota"
+                );
+                err
+            })?;
         let features = plan.features;
 
         let current = self
             .live_following_repository
             .count_active_follows(user_id)
-            .await?;
+            .await
+            .map_err(|err| {
+                error!(
+                    %user_id,
+                    db_error = ?err,
+                    "live_following: failed to count active follows"
+                );
+                err
+            })?;
 
         let max_follows = features.max_follows.unwrap_or(0);
 
         if max_follows <= 0 || current >= max_follows {
+            warn!(
+                %user_id,
+                max_follows,
+                current_active = current,
+                status = axum::http::StatusCode::FORBIDDEN.as_u16(),
+                "live_following: follow limit reached"
+            );
             return Err(anyhow!(
                 "follow limit reached: current={} max={}",
                 current,

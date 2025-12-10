@@ -13,7 +13,10 @@ pub async fn run(usecase: Arc<InsertLiveAccountUseCase>) -> Result<()> {
     info!("Starting RecordingEngineWebDriver worker loop");
     loop {
         if let Err(e) = process_unsynced_live_accounts(&usecase).await {
-            error!("Error while processing unsynced live accounts: {}", e);
+            error!(
+                error = %e,
+                "recording_engine_web_driver: error while processing unsynced live accounts"
+            );
         }
 
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -24,7 +27,10 @@ async fn process_unsynced_live_accounts(usecase: &InsertLiveAccountUseCase) -> R
     let accounts = match usecase.get_unsynced_live_accounts().await {
         Ok(accounts) => accounts,
         Err(e) => {
-            error!("Error fetching unsynced accounts: {}", e);
+            error!(
+                error = %e,
+                "recording_engine_web_driver: error fetching unsynced accounts"
+            );
             return Err(e);
         }
     };
@@ -38,7 +44,10 @@ async fn process_unsynced_live_accounts(usecase: &InsertLiveAccountUseCase) -> R
         add_account_recording_engine(build_urls_string(&accounts), accounts)
             .await
             .map_err(|e| {
-                error!("Failed to add accounts to Recording Engine: {}", e);
+                error!(
+                    error = %e,
+                    "recording_engine_web_driver: failed to add accounts to Recording Engine"
+                );
                 e
             })?;
 
@@ -58,7 +67,11 @@ fn build_urls_string(accounts: &[LiveAccountEntity]) -> String {
 
 fn log_unsynced_account_urls(accounts: &[LiveAccountEntity]) {
     let urls = build_urls_string(accounts);
-    info!("Found unsynced accounts. URLs:\n{}", urls);
+    info!(
+        account_count = accounts.len(),
+        urls = %urls,
+        "Found unsynced accounts"
+    );
 }
 
 async fn update_synced_accounts(
@@ -67,17 +80,25 @@ async fn update_synced_accounts(
 ) {
     for account in added_accounts {
         info!(
-            "Updating account {} ({}) to Synced",
-            account.id, account.canonical_url
+            live_account_id = %account.id,
+            canonical_url = %account.canonical_url,
+            "Updating account to Synced"
         );
 
         if let Err(e) = usecase
             .update_live_account_status(account.id, LiveAccountStatus::Synced)
             .await
         {
-            error!("Failed to update account {}: {}", account.id, e);
+            error!(
+                live_account_id = %account.id,
+                error = %e,
+                "Failed to update account to Synced"
+            );
         } else {
-            info!("Successfully updated account {} to Synced", account.id);
+            info!(
+                live_account_id = %account.id,
+                "Successfully updated account to Synced"
+            );
         }
     }
 }
@@ -86,8 +107,10 @@ fn log_failed_accounts(failed_accounts: Option<&[LiveAccountEntity]>) {
     if let Some(accounts) = failed_accounts {
         for account in accounts {
             error!(
-                "Failed to add account {} to Recording Engine. account_id: {}, URL: {}",
-                account.id, account.account_id, account.canonical_url
+                live_account_id = %account.id,
+                account_id = %account.account_id,
+                canonical_url = %account.canonical_url,
+                "Failed to add account to Recording Engine"
             );
         }
     }
