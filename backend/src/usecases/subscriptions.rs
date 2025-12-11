@@ -17,7 +17,6 @@ use crates::{
                 billing_modes::BillingMode, payment_methods::PaymentMethod,
                 payment_statuses::PaymentStatus, subscription_statuses::SubscriptionStatus,
             },
-            plans::PlanFeatures,
             subscriptions::{CurrentSubscriptionDto, PlanDto},
         },
     },
@@ -35,7 +34,6 @@ pub trait StripeGateway: Send + Sync {
         &self,
         price_id: &str,
         mode: &str,
-        payment_method_types: Vec<String>,
         customer_id: Option<String>,
         metadata: HashMap<String, String>,
     ) -> AnyResult<String>;
@@ -53,12 +51,10 @@ impl StripeGateway for StripeClient {
         &self,
         price_id: &str,
         mode: &str,
-        payment_method_types: Vec<String>,
         customer_id: Option<String>,
         metadata: HashMap<String, String>,
     ) -> AnyResult<String> {
-        self.create_checkout_session(price_id, mode, payment_method_types, customer_id, metadata)
-            .await
+        self.create_checkout_session(price_id, mode, customer_id, metadata).await
     }
 
     async fn cancel_subscription(&self, provider_subscription_id: &str) -> AnyResult<()> {
@@ -406,7 +402,6 @@ where
             );
         }
 
-        let payment_method_types = vec![payment_method.to_string()];
         let mode = match billing_mode {
             BillingMode::Recurring => "subscription",
             BillingMode::OneTime => "payment",
@@ -428,7 +423,6 @@ where
             .create_checkout_session(
                 &price_id,
                 mode,
-                payment_method_types,
                 Some(customer_id.clone()),
                 metadata,
             )
@@ -790,25 +784,28 @@ where
                         SubscriptionError::Internal(err)
                     })?;
 
-                let starts_at = Self::ts_to_datetime(subscription.current_period_start)
+                let period_start = subscription.period_start();
+                let period_end = subscription.period_end();
+
+                let starts_at = period_start
+                    .and_then(Self::ts_to_datetime)
                     .ok_or_else(|| {
                         SubscriptionError::InvalidWebhook(
                             "period start missing on subscription".to_string(),
                         )
                     })?;
-                let ends_at =
-                    Self::ts_to_datetime(subscription.current_period_end).ok_or_else(|| {
-                        SubscriptionError::InvalidWebhook(
-                            "period end missing on subscription".to_string(),
-                        )
-                    })?;
+                let ends_at = period_end.and_then(Self::ts_to_datetime).ok_or_else(|| {
+                    SubscriptionError::InvalidWebhook(
+                        "period end missing on subscription".to_string(),
+                    )
+                })?;
 
                 info!(
                     %user_id,
                     %plan_id,
                     %subscription_id,
-                    period_start = subscription.current_period_start,
-                    period_end = subscription.current_period_end,
+                    period_start = ?period_start,
+                    period_end = ?period_end,
                     "subscriptions: stripe subscription retrieved"
                 );
 

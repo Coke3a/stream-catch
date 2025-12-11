@@ -5,7 +5,6 @@ use hmac::{Hmac, Mac};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use sha2::Sha256;
-use tracing::error;
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -44,8 +43,43 @@ pub struct StripeCheckoutSession {
 
 #[derive(Debug, Deserialize)]
 pub struct StripeSubscription {
-    pub current_period_start: i64,
-    pub current_period_end: i64,
+    pub current_period_start: Option<i64>,
+    pub current_period_end: Option<i64>,
+    pub billing_cycle_anchor: Option<i64>,
+    #[serde(default)]
+    pub items: StripeSubscriptionItems,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct StripeSubscriptionItems {
+    pub data: Vec<StripeSubscriptionItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct StripeSubscriptionItem {
+    pub current_period_start: Option<i64>,
+    pub current_period_end: Option<i64>,
+}
+
+impl StripeSubscription {
+    /// Returns the subscription period start timestamp, falling back to the first item
+    /// or the billing cycle anchor when the top-level field is absent.
+    pub fn period_start(&self) -> Option<i64> {
+        self.current_period_start
+            .or_else(|| {
+                self.items
+                    .data
+                    .first()
+                    .and_then(|item| item.current_period_start)
+            })
+            .or(self.billing_cycle_anchor)
+    }
+
+    /// Returns the subscription period end timestamp, falling back to the first item when needed.
+    pub fn period_end(&self) -> Option<i64> {
+        self.current_period_end
+            .or_else(|| self.items.data.first().and_then(|item| item.current_period_end))
+    }
 }
 
 impl StripeClient {
@@ -96,7 +130,6 @@ impl StripeClient {
         &self,
         price_id: &str,
         mode: &str,
-        payment_method_types: Vec<String>,
         customer_id: Option<String>,
         metadata: HashMap<String, String>,
     ) -> Result<String> {
