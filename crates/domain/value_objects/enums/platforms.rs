@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Platform {
     TikTok,
     Twitch,
     Bigo,
+    Kick,
+    SoopLive,
 }
 
 impl Display for Platform {
@@ -14,6 +16,8 @@ impl Display for Platform {
             Platform::TikTok => "tiktok",
             Platform::Twitch => "twitch",
             Platform::Bigo => "bigo",
+            Platform::Kick => "kick",
+            Platform::SoopLive => "sooplive",
         };
         write!(f, "{}", platform)
     }
@@ -27,6 +31,8 @@ impl FromStr for Platform {
             "tiktok" => Ok(Platform::TikTok),
             "twitch" => Ok(Platform::Twitch),
             "bigo" => Ok(Platform::Bigo),
+            "kick" => Ok(Platform::Kick),
+            "sooplive" => Ok(Platform::SoopLive),
             other => Err(format!("Unsupported platform: {}", other)),
         }
     }

@@ -11,7 +11,6 @@ use domain::{
     },
     value_objects::enums::{
         follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus,
-        platforms::Platform,
     },
 };
 use tracing::{debug, error, info, warn};
@@ -40,32 +39,37 @@ where
     }
 
     pub async fn follow(&self, user_id: Uuid, insert_url: String) -> Result<()> {
-        info!(%user_id, url = %insert_url, "live_following: follow requested");
+        info!(
+            %user_id,
+            url_len = insert_url.len(),
+            "live_following: follow requested"
+        );
 
-        let url = url::Url::parse(&insert_url).map_err(|err| {
-            warn!(
-                %user_id,
-                url = %insert_url,
-                error = %err,
-                status = axum::http::StatusCode::BAD_REQUEST.as_u16(),
-                "live_following: invalid follow URL"
-            );
-            err
-        })?;
-        let (platform, account_id) = Self::parse_platform_and_account_id(&url).map_err(|err| {
-            warn!(
-                %user_id,
-                url = %insert_url,
-                error = %err,
-                status = axum::http::StatusCode::BAD_REQUEST.as_u16(),
-                "live_following: unsupported platform or account id"
-            );
-            err
-        })?;
-        debug!(platform = %platform, account_id, "live_following: parsed platform/account");
+        let normalized =
+            domain::value_objects::live_account_url::normalize_live_account_url(&insert_url)
+                .map_err(|err| {
+                    warn!(
+                        %user_id,
+                        error = %err,
+                        status = axum::http::StatusCode::BAD_REQUEST.as_u16(),
+                        "live_following: invalid follow URL"
+                    );
+                    err
+                })?;
+
+        let platform = normalized.platform;
+        let account_id = normalized.account_id;
+        let canonical_url = normalized.canonical_url;
+
+        debug!(
+            platform = %platform,
+            account_id,
+            canonical_url,
+            "live_following: normalized follow URL"
+        );
 
         let find_live_account_model = domain::value_objects::live_following::FindLiveAccountModel {
-            platform: platform.clone(),
+            platform,
             account_id: account_id.clone(),
         };
 
@@ -186,7 +190,7 @@ where
                     domain::entities::live_accounts::InsertLiveAccountEntity {
                         platform: platform.to_string(),
                         account_id: account_id.clone(),
-                        canonical_url: insert_url,
+                        canonical_url,
                         status: LiveAccountStatus::Unsynced.to_string(),
                         created_at: now,
                         updated_at: now,
@@ -273,52 +277,4 @@ where
         Ok(())
     }
 
-    fn parse_platform_and_account_id(url: &url::Url) -> Result<(Platform, String)> {
-        let host = url
-            .host_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid URL"))?;
-
-        if host.contains("tiktok.com") {
-            let path_segments: Vec<&str> = url
-                .path_segments()
-                .ok_or_else(|| anyhow::anyhow!("Invalid TikTok URL"))?
-                .collect();
-            // Expected format: /@username/live
-            if path_segments.len() >= 2
-                && path_segments[0].starts_with('@')
-                && path_segments[1] == "live"
-            {
-                Ok((
-                    Platform::TikTok,
-                    path_segments[0].trim_start_matches('@').to_string(),
-                ))
-            } else {
-                Err(anyhow::anyhow!("Invalid TikTok URL format"))
-            }
-        } else if host.contains("bigo.tv") {
-            let path_segments: Vec<&str> = url
-                .path_segments()
-                .ok_or_else(|| anyhow::anyhow!("Invalid Bigo URL"))?
-                .collect();
-            // Expected format: /username
-            if let Some(username) = path_segments.first() {
-                Ok((Platform::Bigo, username.to_string()))
-            } else {
-                Err(anyhow::anyhow!("Invalid Bigo URL format"))
-            }
-        } else if host.contains("twitch.tv") {
-            let path_segments: Vec<&str> = url
-                .path_segments()
-                .ok_or_else(|| anyhow::anyhow!("Invalid Twitch URL"))?
-                .collect();
-            // Expected format: /username
-            if let Some(username) = path_segments.first() {
-                Ok((Platform::Twitch, username.to_string()))
-            } else {
-                Err(anyhow::anyhow!("Invalid Twitch URL format"))
-            }
-        } else {
-            Err(anyhow::anyhow!("Unsupported platform"))
-        }
-    }
 }

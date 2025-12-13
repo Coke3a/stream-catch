@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
+use diesel::upsert::excluded;
 use diesel::{Connection, RunQueryDsl, dsl::count_star, insert_into};
 use diesel::{prelude::*, update};
 use std::sync::Arc;
@@ -45,6 +46,12 @@ impl LiveFollowingRepository for LiveFollowingPostgres {
         let result = conn.transaction::<Uuid, diesel::result::Error, _>(|tx| {
             let live_account_id: Uuid = insert_into(live_accounts::table)
                 .values(&live_account_entity)
+                .on_conflict((live_accounts::platform, live_accounts::account_id))
+                .do_update()
+                .set((
+                    live_accounts::canonical_url.eq(excluded(live_accounts::canonical_url)),
+                    live_accounts::updated_at.eq(excluded(live_accounts::updated_at)),
+                ))
                 .returning(live_accounts::id)
                 .get_result::<Uuid>(tx)?;
 

@@ -6,8 +6,8 @@ use axum::{
 use chrono::Utc;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use tracing::warn;
+use uuid::Uuid;
 
 use crate::config::config_loader;
 
@@ -115,15 +115,14 @@ where
         let token = &auth_str[7..];
 
         // 3. Validate JWT
-        let claims = validate_supabase_jwt(token)
-            .map_err(|e| {
-                warn!(
-                    status = StatusCode::UNAUTHORIZED.as_u16(),
-                    error = %e.0,
-                    "auth: JWT validation failed"
-                );
-                (StatusCode::UNAUTHORIZED, e.0.to_string())
-            })?;
+        let claims = validate_supabase_jwt(token).map_err(|e| {
+            warn!(
+                status = StatusCode::UNAUTHORIZED.as_u16(),
+                error = %e.0,
+                "auth: JWT validation failed"
+            );
+            (StatusCode::UNAUTHORIZED, e.0.to_string())
+        })?;
 
         // 4. Parse sub to Uuid
         let user_id = Uuid::parse_str(&claims.sub).map_err(|_| {

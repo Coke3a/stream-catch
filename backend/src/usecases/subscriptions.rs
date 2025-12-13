@@ -54,7 +54,8 @@ impl StripeGateway for StripeClient {
         customer_id: Option<String>,
         metadata: HashMap<String, String>,
     ) -> AnyResult<String> {
-        self.create_checkout_session(price_id, mode, customer_id, metadata).await
+        self.create_checkout_session(price_id, mode, customer_id, metadata)
+            .await
     }
 
     async fn cancel_subscription(&self, provider_subscription_id: &str) -> AnyResult<()> {
@@ -154,14 +155,10 @@ where
 
     pub async fn list_plans(&self) -> UseCaseResult<Vec<PlanDto>> {
         info!("subscriptions: listing active plans");
-        let plans = self
-            .plan_repo
-            .list_active_plans()
-            .await
-            .map_err(|err| {
-                error!(db_error = ?err, "subscriptions: failed to list active plans");
-                SubscriptionError::Internal(err)
-            })?;
+        let plans = self.plan_repo.list_active_plans().await.map_err(|err| {
+            error!(db_error = ?err, "subscriptions: failed to list active plans");
+            SubscriptionError::Internal(err)
+        })?;
         let plan_count = plans.len();
         info!(plan_count, "subscriptions: active plans loaded");
         Ok(plans.into_iter().map(PlanDto::from).collect())
@@ -186,8 +183,7 @@ where
                     "subscriptions: failed to load current subscription"
                 );
                 SubscriptionError::Internal(err)
-            })?
-        {
+            })? {
             Some(sub) => sub,
             None => {
                 info!(%user_id, "subscriptions: no active subscription");
@@ -420,12 +416,7 @@ where
 
         let checkout_url = self
             .stripe_client
-            .create_checkout_session(
-                &price_id,
-                mode,
-                Some(customer_id.clone()),
-                metadata,
-            )
+            .create_checkout_session(&price_id, mode, Some(customer_id.clone()), metadata)
             .await
             .map_err(|err| {
                 error!(
@@ -537,18 +528,19 @@ where
             return Err(err);
         }
 
-        let provider_subscription_id = subscription
-            .provider_subscription_id
-            .clone()
-            .ok_or_else(|| {
-                let err = SubscriptionError::SubscriptionNotFound;
-                warn!(
-                    %user_id,
-                    status = err.status_code().as_u16(),
-                    "subscriptions: recurring subscription missing provider id"
-                );
-                err
-            })?;
+        let provider_subscription_id =
+            subscription
+                .provider_subscription_id
+                .clone()
+                .ok_or_else(|| {
+                    let err = SubscriptionError::SubscriptionNotFound;
+                    warn!(
+                        %user_id,
+                        status = err.status_code().as_u16(),
+                        "subscriptions: recurring subscription missing provider id"
+                    );
+                    err
+                })?;
 
         info!(%user_id, "subscriptions: canceling recurring subscription at Stripe");
         self.stripe_client
@@ -605,51 +597,39 @@ where
                     );
                     return Err(err);
                 }
-                plan
-                    .stripe_price_recurring
-                    .clone()
-                    .ok_or_else(|| {
-                        let err = SubscriptionError::MissingPrice("stripe_price_recurring");
+                plan.stripe_price_recurring.clone().ok_or_else(|| {
+                    let err = SubscriptionError::MissingPrice("stripe_price_recurring");
+                    warn!(
+                        status = err.status_code().as_u16(),
+                        plan_id = %plan.id,
+                        "subscriptions: missing recurring price"
+                    );
+                    err
+                })
+            }
+            BillingMode::OneTime => match payment_method {
+                PaymentMethod::Card => plan.stripe_price_one_time_card.clone().ok_or_else(|| {
+                    let err = SubscriptionError::MissingPrice("stripe_price_one_time_card");
+                    warn!(
+                        status = err.status_code().as_u16(),
+                        plan_id = %plan.id,
+                        "subscriptions: missing one-time card price"
+                    );
+                    err
+                }),
+                PaymentMethod::PromptPay => {
+                    plan.stripe_price_one_time_promptpay.clone().ok_or_else(|| {
+                        let err =
+                            SubscriptionError::MissingPrice("stripe_price_one_time_promptpay");
                         warn!(
                             status = err.status_code().as_u16(),
                             plan_id = %plan.id,
-                            "subscriptions: missing recurring price"
+                            "subscriptions: missing promptpay price"
                         );
                         err
                     })
-            }
-            BillingMode::OneTime => {
-                match payment_method {
-                    PaymentMethod::Card => plan
-                        .stripe_price_one_time_card
-                        .clone()
-                        .ok_or_else(|| {
-                            let err = SubscriptionError::MissingPrice(
-                                "stripe_price_one_time_card",
-                            );
-                            warn!(
-                                status = err.status_code().as_u16(),
-                                plan_id = %plan.id,
-                                "subscriptions: missing one-time card price"
-                            );
-                            err
-                        }),
-                    PaymentMethod::PromptPay => plan
-                        .stripe_price_one_time_promptpay
-                        .clone()
-                        .ok_or_else(|| {
-                            let err = SubscriptionError::MissingPrice(
-                                "stripe_price_one_time_promptpay",
-                            );
-                            warn!(
-                                status = err.status_code().as_u16(),
-                                plan_id = %plan.id,
-                                "subscriptions: missing promptpay price"
-                            );
-                            err
-                        }),
                 }
-            }
+            },
         }
     }
 
@@ -668,17 +648,14 @@ where
             err
         })?;
 
-        let metadata = session
-            .metadata
-            .clone()
-            .ok_or_else(|| {
-                let err = SubscriptionError::InvalidWebhook("missing metadata".to_string());
-                warn!(
-                    status = err.status_code().as_u16(),
-                    "subscriptions: missing metadata on checkout session"
-                );
-                err
-            })?;
+        let metadata = session.metadata.clone().ok_or_else(|| {
+            let err = SubscriptionError::InvalidWebhook("missing metadata".to_string());
+            warn!(
+                status = err.status_code().as_u16(),
+                "subscriptions: missing metadata on checkout session"
+            );
+            err
+        })?;
 
         let user_id = metadata
             .get("user_id")
@@ -709,9 +686,8 @@ where
             .unwrap_or(PaymentMethod::Card);
 
         if plan_id == self.free_plan_id {
-            let err = SubscriptionError::InvalidWebhook(
-                "free plan cannot be purchased".to_string(),
-            );
+            let err =
+                SubscriptionError::InvalidWebhook("free plan cannot be purchased".to_string());
             warn!(
                 %user_id,
                 %plan_id,
@@ -787,13 +763,11 @@ where
                 let period_start = subscription.period_start();
                 let period_end = subscription.period_end();
 
-                let starts_at = period_start
-                    .and_then(Self::ts_to_datetime)
-                    .ok_or_else(|| {
-                        SubscriptionError::InvalidWebhook(
-                            "period start missing on subscription".to_string(),
-                        )
-                    })?;
+                let starts_at = period_start.and_then(Self::ts_to_datetime).ok_or_else(|| {
+                    SubscriptionError::InvalidWebhook(
+                        "period start missing on subscription".to_string(),
+                    )
+                })?;
                 let ends_at = period_end.and_then(Self::ts_to_datetime).ok_or_else(|| {
                     SubscriptionError::InvalidWebhook(
                         "period end missing on subscription".to_string(),
@@ -973,9 +947,8 @@ where
                 );
             }
             _ => {
-                let err = SubscriptionError::InvalidWebhook(
-                    "unknown checkout session mode".to_string(),
-                );
+                let err =
+                    SubscriptionError::InvalidWebhook("unknown checkout session mode".to_string());
                 warn!(
                     %user_id,
                     %plan_id,

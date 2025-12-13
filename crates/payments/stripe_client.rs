@@ -77,8 +77,12 @@ impl StripeSubscription {
 
     /// Returns the subscription period end timestamp, falling back to the first item when needed.
     pub fn period_end(&self) -> Option<i64> {
-        self.current_period_end
-            .or_else(|| self.items.data.first().and_then(|item| item.current_period_end))
+        self.current_period_end.or_else(|| {
+            self.items
+                .data
+                .first()
+                .and_then(|item| item.current_period_end)
+        })
     }
 }
 

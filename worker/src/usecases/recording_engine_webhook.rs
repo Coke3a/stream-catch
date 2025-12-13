@@ -101,19 +101,15 @@ impl RecordingEngineWebhookUseCase {
         };
 
         let insert_entity = insert_model.to_entity();
-        let recording_id = self
-            .repository
-            .insert(insert_entity)
-            .await
-            .map_err(|err| {
-                error!(
-                    platform = %platform,
-                    channel,
-                    db_error = ?err,
-                    "live_start: failed to insert recording"
-                );
-                err
-            })?;
+        let recording_id = self.repository.insert(insert_entity).await.map_err(|err| {
+            error!(
+                platform = %platform,
+                channel,
+                db_error = ?err,
+                "live_start: failed to insert recording"
+            );
+            err
+        })?;
         info!(%recording_id, "live_start: recording inserted");
         Ok(recording_id)
     }
@@ -157,8 +153,7 @@ impl RecordingEngineWebhookUseCase {
                     "transmux_finish: failed to find live recording by status"
                 );
                 err
-            })?
-        {
+            })? {
             recording.id
         } else {
             let live_account = self
@@ -343,9 +338,7 @@ impl RecordingEngineWebhookUseCase {
 
     fn parse_platform(&self, platform: Option<String>) -> Result<Platform> {
         let platform_str = platform.ok_or_else(|| {
-            warn!(
-                "webhook: platform is required but missing in payload"
-            );
+            warn!("webhook: platform is required but missing in payload");
             anyhow::anyhow!("platform is required")
         })?;
         Platform::from_str(&platform_str).map_err(|_| {
