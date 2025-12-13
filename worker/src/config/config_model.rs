@@ -6,6 +6,7 @@ pub struct DotEnvyConfig {
     pub database: Database,
     pub supabase: Supabase,
     pub video_storage: WasabiStorageConfig,
+    pub cleanup: Cleanup,
 }
 
 #[derive(Debug, Clone)]
@@ -29,4 +30,10 @@ pub struct Supabase {
     pub s3_access_key: String,
     pub s3_secret_key: String,
     pub poster_prefix: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Cleanup {
+    pub internal_token: Option<String>,
+    pub default_retention_days: i64,
 }

@@ -922,6 +922,7 @@ dependencies = [
  "thirtyfour",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
  "uuid",
 ]
@@ -3670,6 +3671,7 @@ dependencies = [
  "crates",
  "dotenvy",
  "mp4",
+ "serde",
  "serde_json",
  "tokio",
  "tower-http",

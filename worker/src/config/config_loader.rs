@@ -1,6 +1,6 @@
 use crate::config::stage::Stage;
 
-use super::config_model::{Database, DotEnvyConfig, Supabase, WorkerServer};
+use super::config_model::{Cleanup, Database, DotEnvyConfig, Supabase, WorkerServer};
 use anyhow::Result;
 use crates::infra::storages::wasabi::WasabiStorageConfig;
 
@@ -60,11 +60,26 @@ pub fn load() -> Result<DotEnvyConfig> {
             .unwrap_or_else(|_| "recordings".to_string()),
     };
 
+    let cleanup = Cleanup {
+        internal_token: std::env::var("INTERNAL_CLEANUP_TOKEN")
+            .ok()
+            .and_then(|v| {
+                let trimmed = v.trim().to_string();
+                (!trimmed.is_empty()).then_some(trimmed)
+            }),
+        default_retention_days: std::env::var("CLEANUP_DEFAULT_RETENTION_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|v| *v >= 0)
+            .unwrap_or(60),
+    };
+
     Ok(DotEnvyConfig {
         worker_server,
         database,
         supabase,
         video_storage,
+        cleanup,
     })
 }
 

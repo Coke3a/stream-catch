@@ -11,6 +11,8 @@ pub trait StorageClient {
         local_path: &str,
         recording: &RecordingEntity,
     ) -> Result<UploadResult>;
+
+    async fn delete_object(&self, object_key: &str) -> Result<()>;
 }
 
 #[async_trait]
@@ -21,4 +23,6 @@ pub trait CoverStorageClient {
         bytes: Vec<u8>,
         content_type: &str,
     ) -> Result<String>;
+
+    async fn delete_object(&self, object_key: &str) -> Result<()>;
 }

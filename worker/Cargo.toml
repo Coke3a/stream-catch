@@ -13,6 +13,7 @@ uuid = { version = "1.11.0", features = ["serde", "v4"] }
 axum = "0.7.7"
 url = "2.5.0"
 serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 tower-http = { version = "0.6.1", features = ["cors", "limit", "timeout", "trace"] }
 dotenvy = "0.15.7"
 mp4 = "0.14"

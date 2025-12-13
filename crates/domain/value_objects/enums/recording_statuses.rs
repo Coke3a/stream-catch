@@ -10,6 +10,7 @@ pub enum RecordingStatus {
     Uploading,
     Ready,
     Failed,
+    ExpiredDeleted,
 }
 
 impl Display for RecordingStatus {
@@ -21,6 +22,7 @@ impl Display for RecordingStatus {
             RecordingStatus::Uploading => "uploading",
             RecordingStatus::Ready => "ready",
             RecordingStatus::Failed => "failed",
+            RecordingStatus::ExpiredDeleted => "expired_deleted",
         };
         write!(f, "{}", follow_status)
     }

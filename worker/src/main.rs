@@ -1,14 +1,17 @@
 use anyhow::Result;
 use crates::domain::repositories::{
     job::JobRepository, live_account_recording_engine::LiveAccountRecordingEngineRepository,
+    recording_cleanup::RecordingCleanupRepository,
     recording_engine_webhook::RecordingEngineWebhookRepository,
     recording_upload::RecordingUploadRepository,
+    storage::{CoverStorageClient, StorageClient},
 };
 use crates::infra::{
     db::{
         postgres::postgres_connection,
         repositories::{
             job::JobPostgres, live_account_recording_engine::LiveAccountRecordingEnginePostgres,
+            recording_cleanup::RecordingCleanupPostgres,
             recording_engine_webhook::RecordingEngineWebhookPostgres,
             recording_upload::RecordingUploadPostgres,
         },
@@ -24,6 +27,7 @@ use tracing::info;
 use worker::{
     axum_http, config, recording_engine_web_driver, recording_uploading,
     usecases::{
+        cleanup_expired_recordings::CleanupExpiredRecordingsUseCase,
         insert_live_account_recording_engine::InsertLiveAccountUseCase,
         recording_engine_webhook::RecordingEngineWebhookUseCase,
     },
@@ -39,9 +43,8 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
-        .init();
+    dotenvy::dotenv().ok();
+    crates::observability::init_observability("worker")?;
 
     let dotenvy_env = Arc::new(config::config_loader::load()?);
     info!("ENV has been loaded");
@@ -69,7 +72,7 @@ async fn run() -> Result<()> {
 
     // init recording_engine_webhook
     let supa = &dotenvy_env.supabase;
-    let cover_storage_client = Arc::new(
+    let cover_storage_client: Arc<dyn CoverStorageClient + Send + Sync> = Arc::new(
         SupabaseStorageClient::new(SupabaseStorageConfig {
             endpoint: supa.s3_endpoint.clone(),
             region: supa.s3_region.clone(),
@@ -93,29 +96,37 @@ async fn run() -> Result<()> {
     let recording_engine_webhook_usecase = Arc::new(RecordingEngineWebhookUseCase::new(
         recording_engine_webhook_repository,
         Arc::clone(&job_repository),
-        cover_storage_client,
+        Arc::clone(&cover_storage_client),
     ));
 
     let server_config = Arc::clone(&dotenvy_env);
     let server_usecase = recording_engine_webhook_usecase;
 
-    let recording_engine_webhook =
-        tokio::spawn(
-            async move { axum_http::http_serve::start(server_config, server_usecase).await },
-        );
+    let cleanup_repo: Arc<dyn RecordingCleanupRepository + Send + Sync> =
+        Arc::new(RecordingCleanupPostgres::new(Arc::clone(&db_pool_arc)));
 
     let recording_upload_repository: Arc<dyn RecordingUploadRepository + Send + Sync> =
         Arc::new(RecordingUploadPostgres::new(Arc::clone(&db_pool_arc)));
 
     let video_storage_client_config = dotenvy_env.video_storage.clone();
-    let video_storage_client =
+    let video_storage_client: Arc<dyn StorageClient + Send + Sync> =
         Arc::new(WasabiStorageClient::new(video_storage_client_config).await?);
+
+    let cleanup_usecase = Arc::new(CleanupExpiredRecordingsUseCase::new(
+        cleanup_repo,
+        Arc::clone(&video_storage_client),
+        Arc::clone(&cover_storage_client),
+    ));
+
+    let recording_engine_webhook = tokio::spawn(async move {
+        axum_http::http_serve::start(server_config, server_usecase, cleanup_usecase).await
+    });
 
     // Spawn background loop
     let recording_uploading_loop = tokio::spawn(recording_uploading::worker::run(
         job_repository,
         recording_upload_repository,
-        video_storage_client,
+        Arc::clone(&video_storage_client),
     ));
 
     tokio::select! {

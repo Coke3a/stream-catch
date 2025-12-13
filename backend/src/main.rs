@@ -14,9 +14,8 @@ async fn main() {
 }
 
 async fn run() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
-        .init();
+    dotenvy::dotenv().ok();
+    crates::observability::init_observability("backend")?;
 
     let dotenvy_env = config_loader::load()?;
     info!("ENV has been loaded");

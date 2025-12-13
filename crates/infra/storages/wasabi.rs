@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use aws_sdk_s3::{
     error::{ProvideErrorMetadata, SdkError},
+    operation::delete_object::DeleteObjectError,
     operation::put_object::PutObjectError,
     primitives::ByteStream,
     types::ServerSideEncryption,
@@ -66,6 +67,20 @@ impl WasabiStorageClient {
             key_prefix: prefix,
         })
     }
+
+    /// Wasabi DeleteObject reference:
+    /// https://wasabi-support.zendesk.com/hc/en-us/articles/115001820872-Amazon-S3-API-Support-and-Compatibility
+    pub async fn delete_object(&self, object_key: &str) -> Result<()> {
+        self.client
+            .delete_object()
+            .bucket(&self.bucket)
+            .key(object_key)
+            .send()
+            .await
+            .map_err(|err| map_delete_object_error(err, &self.bucket, object_key))?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -124,6 +139,10 @@ impl StorageClient for WasabiStorageClient {
             duration_sec,
         })
     }
+
+    async fn delete_object(&self, object_key: &str) -> Result<()> {
+        WasabiStorageClient::delete_object(self, object_key).await
+    }
 }
 
 fn normalize_prefix(prefix: &str) -> String {
@@ -176,6 +195,45 @@ fn map_put_object_error(
         "failed to upload recording {} to Wasabi",
         recording_id
     ))
+}
+
+fn map_delete_object_error(
+    err: SdkError<DeleteObjectError>,
+    bucket: &str,
+    object_key: &str,
+) -> anyhow::Error {
+    if let SdkError::ServiceError(service_err) = &err {
+        let raw = service_err.raw();
+        let status = raw.status().as_u16();
+        let code = service_err.err().code().unwrap_or("unknown");
+        let message = service_err.err().message().unwrap_or_default();
+        let body = raw
+            .body()
+            .bytes()
+            .map(|b| String::from_utf8_lossy(b).trim().to_owned())
+            .filter(|b| !b.is_empty())
+            .unwrap_or_default();
+
+        let mut detail = format!(
+            "failed to delete Wasabi object (status {}, code {})",
+            status, code
+        );
+
+        if !message.is_empty() {
+            detail.push_str(&format!(": {}", message));
+        }
+
+        detail.push_str(&format!(" [bucket={}, key={}]", bucket, object_key));
+
+        if !body.is_empty() {
+            let preview = body.chars().take(512).collect::<String>();
+            detail.push_str(&format!("; body={}", preview));
+        }
+
+        return anyhow::anyhow!(detail);
+    }
+
+    anyhow::Error::new(err).context("failed to delete Wasabi object")
 }
 
 #[cfg(test)]

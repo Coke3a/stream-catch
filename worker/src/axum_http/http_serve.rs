@@ -5,6 +5,7 @@ use crate::{
     },
     config::config_model::DotEnvyConfig,
     usecases::recording_engine_webhook::RecordingEngineWebhookUseCase,
+    usecases::cleanup_expired_recordings::CleanupExpiredRecordingsUseCase,
 };
 use anyhow::Result;
 use axum::{
@@ -25,6 +26,7 @@ use tracing::info;
 pub async fn start(
     config: Arc<DotEnvyConfig>,
     usecase: Arc<RecordingEngineWebhookUseCase>,
+    cleanup_usecase: Arc<CleanupExpiredRecordingsUseCase>,
 ) -> Result<()> {
     let allowed_origins = vec![
         "http://localhost".parse()?,
@@ -38,6 +40,10 @@ pub async fn start(
         .nest(
             "/internal/recording-engine",
             routers::recording_engine_webhook::routes(usecase),
+        )
+        .nest(
+            "/internal/v1/cleanup",
+            routers::cleanup_recordings::routes(Arc::clone(&config), cleanup_usecase),
         )
         .route("/health-check", get(default_routers::health_check))
         .layer(TimeoutLayer::new(Duration::from_secs(
@@ -56,7 +62,7 @@ pub async fn start(
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.worker_server.port));
     let listener = TcpListener::bind(addr).await?;
-    info!("Recording engine webhook server running on {}", addr);
+    info!("Worker HTTP server running on {}", addr);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

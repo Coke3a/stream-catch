@@ -213,7 +213,7 @@ CREATE TABLE "recordings" (
   "size_bytes" BIGINT,
   "storage_path" TEXT,
   "storage_temp_path" TEXT,
-  "status" TEXT NOT NULL CHECK ("status" IN ('live_recording','live_end','waiting_upload','uploading','ready','failed')) DEFAULT 'live_recording',
+  "status" TEXT NOT NULL CHECK ("status" IN ('live_recording','live_end','waiting_upload','uploading','ready','failed','expired_deleted')) DEFAULT 'live_recording',
   "poster_storage_path" TEXT,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now()
