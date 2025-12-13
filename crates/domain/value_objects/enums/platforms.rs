@@ -3,7 +3,6 @@ use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Platform {
-    YouTube,
     TikTok,
     Twitch,
     Bigo,
@@ -12,7 +11,6 @@ pub enum Platform {
 impl Display for Platform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let platform = match self {
-            Platform::YouTube => "youtube",
             Platform::TikTok => "tiktok",
             Platform::Twitch => "twitch",
             Platform::Bigo => "bigo",
@@ -26,7 +24,6 @@ impl FromStr for Platform {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.to_lowercase().as_str() {
-            "youtube" => Ok(Platform::YouTube),
             "tiktok" => Ok(Platform::TikTok),
             "twitch" => Ok(Platform::Twitch),
             "bigo" => Ok(Platform::Bigo),
