@@ -456,7 +456,7 @@ where
             .stripe_client
             .verify_webhook_signature(payload, signature)
             .map_err(|err| {
-                warn!(
+                error!(
                     error = %err,
                     status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
                     "stripe webhook verification failed"
@@ -465,16 +465,40 @@ where
             })?;
 
         let event_type = event.type_.clone();
-        info!(event_type = %event_type, "subscriptions: stripe webhook verified");
+        info!(
+            stripe_event_id = ?event.id,
+            event_type = %event_type,
+            created = ?event.created,
+            livemode = ?event.livemode,
+            api_version = ?event.api_version,
+            request = ?event.request,
+            "subscriptions: stripe webhook verified"
+        );
 
         match event_type.as_str() {
             "checkout.session.completed" => {
                 self.handle_checkout_completed(&event).await?;
             }
             "customer.subscription.deleted" => {
+                error!(
+                    stripe_event_id = ?event.id,
+                    created = ?event.created,
+                    livemode = ?event.livemode,
+                    api_version = ?event.api_version,
+                    request = ?event.request,
+                    "subscriptions: stripe subscription deleted event received"
+                );
                 self.handle_subscription_deleted(&event).await?;
             }
             "invoice.payment_failed" => {
+                error!(
+                    stripe_event_id = ?event.id,
+                    created = ?event.created,
+                    livemode = ?event.livemode,
+                    api_version = ?event.api_version,
+                    request = ?event.request,
+                    "subscriptions: stripe invoice payment failed event received"
+                );
                 self.handle_invoice_status_change(&event, SubscriptionStatus::PastDue)
                     .await?;
             }
@@ -483,7 +507,15 @@ where
                     .await?;
             }
             _ => {
-                debug!("unhandled stripe event type: {:?}", event.type_);
+                error!(
+                    stripe_event_id = ?event.id,
+                    event_type = %event.type_,
+                    created = ?event.created,
+                    livemode = ?event.livemode,
+                    api_version = ?event.api_version,
+                    request = ?event.request,
+                    "subscriptions: unhandled stripe event type"
+                );
             }
         }
 
@@ -635,13 +667,19 @@ where
 
     async fn handle_checkout_completed(&self, event: &StripeEvent) -> UseCaseResult<()> {
         info!(
+            stripe_event_id = ?event.id,
             event_type = %event.type_,
             payload = ?event.data.object,
+            created = ?event.created,
+            livemode = ?event.livemode,
+            api_version = ?event.api_version,
+            request = ?event.request,
             "subscriptions: processing checkout completed webhook"
         );
         let session = StripeClient::extract_checkout_session(&event).ok_or_else(|| {
             let err = SubscriptionError::InvalidWebhook("missing checkout session".to_string());
-            warn!(
+            error!(
+                stripe_event_id = ?event.id,
                 status = err.status_code().as_u16(),
                 "subscriptions: checkout session missing in webhook"
             );
@@ -650,7 +688,8 @@ where
 
         let metadata = session.metadata.clone().ok_or_else(|| {
             let err = SubscriptionError::InvalidWebhook("missing metadata".to_string());
-            warn!(
+            error!(
+                stripe_event_id = ?event.id,
                 status = err.status_code().as_u16(),
                 "subscriptions: missing metadata on checkout session"
             );
@@ -662,7 +701,8 @@ where
             .and_then(|v| Uuid::parse_str(v).ok())
             .ok_or_else(|| {
                 let err = SubscriptionError::InvalidWebhook("missing user_id".to_string());
-                warn!(
+                error!(
+                    stripe_event_id = ?event.id,
                     status = err.status_code().as_u16(),
                     "subscriptions: missing user_id in checkout metadata"
                 );
@@ -673,7 +713,8 @@ where
             .and_then(|v| Uuid::parse_str(v).ok())
             .ok_or_else(|| {
                 let err = SubscriptionError::InvalidWebhook("missing plan_id".to_string());
-                warn!(
+                error!(
+                    stripe_event_id = ?event.id,
                     %user_id,
                     status = err.status_code().as_u16(),
                     "subscriptions: missing plan_id in checkout metadata"
@@ -688,7 +729,8 @@ where
         if plan_id == self.free_plan_id {
             let err =
                 SubscriptionError::InvalidWebhook("free plan cannot be purchased".to_string());
-            warn!(
+            error!(
+                stripe_event_id = ?event.id,
                 %user_id,
                 %plan_id,
                 status = err.status_code().as_u16(),
@@ -949,7 +991,8 @@ where
             _ => {
                 let err =
                     SubscriptionError::InvalidWebhook("unknown checkout session mode".to_string());
-                warn!(
+                error!(
+                    stripe_event_id = ?event.id,
                     %user_id,
                     %plan_id,
                     status = err.status_code().as_u16(),
@@ -969,11 +1012,17 @@ where
         #[derive(Deserialize)]
         struct SubscriptionObject {
             id: Option<String>,
+            customer: Option<String>,
+            status: Option<String>,
+            canceled_at: Option<i64>,
+            cancel_at_period_end: Option<bool>,
+            ended_at: Option<i64>,
         }
 
         let subscription: SubscriptionObject = serde_json::from_value(event.data.object.clone())
             .map_err(|err| {
-                warn!(
+                error!(
+                    stripe_event_id = ?event.id,
                     error = %err,
                     status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
                     "subscriptions: invalid subscription payload in webhook"
@@ -983,15 +1032,22 @@ where
 
         let subscription_id = subscription.id.ok_or_else(|| {
             let err = SubscriptionError::InvalidWebhook("missing subscription id".to_string());
-            warn!(
+            error!(
+                stripe_event_id = ?event.id,
                 status = err.status_code().as_u16(),
                 "subscriptions: subscription id missing in webhook payload"
             );
             err
         })?;
 
-        info!(
+        error!(
+            stripe_event_id = ?event.id,
             subscription_id = %subscription_id,
+            customer_id = ?subscription.customer,
+            subscription_status = ?subscription.status,
+            canceled_at = ?subscription.canceled_at,
+            cancel_at_period_end = ?subscription.cancel_at_period_end,
+            ended_at = ?subscription.ended_at,
             "subscriptions: marking subscription expired from webhook"
         );
 
@@ -1020,12 +1076,22 @@ where
     ) -> UseCaseResult<()> {
         #[derive(Deserialize)]
         struct InvoiceObject {
+            id: Option<String>,
             subscription: Option<String>,
+            customer: Option<String>,
+            status: Option<String>,
+            amount_due: Option<i64>,
+            amount_paid: Option<i64>,
+            attempt_count: Option<u32>,
+            next_payment_attempt: Option<i64>,
+            hosted_invoice_url: Option<String>,
+            payment_intent: Option<String>,
         }
 
         let invoice: InvoiceObject =
             serde_json::from_value(event.data.object.clone()).map_err(|err| {
-                warn!(
+                error!(
+                    stripe_event_id = ?event.id,
                     error = %err,
                     status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
                     "subscriptions: invalid invoice payload in webhook"
@@ -1036,24 +1102,46 @@ where
         let subscription_id = invoice.subscription.ok_or_else(|| {
             let err =
                 SubscriptionError::InvalidWebhook("invoice missing subscription id".to_string());
-            warn!(
+            error!(
+                stripe_event_id = ?event.id,
                 status = err.status_code().as_u16(),
                 "subscriptions: invoice webhook missing subscription id"
             );
             err
         })?;
 
-        info!(
-            subscription_id = %subscription_id,
-            status = %status,
-            "subscriptions: updating status from invoice webhook"
-        );
+        if status == SubscriptionStatus::PastDue {
+            error!(
+                stripe_event_id = ?event.id,
+                invoice_id = ?invoice.id,
+                customer_id = ?invoice.customer,
+                subscription_id = %subscription_id,
+                stripe_invoice_status = ?invoice.status,
+                amount_due = ?invoice.amount_due,
+                amount_paid = ?invoice.amount_paid,
+                attempt_count = ?invoice.attempt_count,
+                next_payment_attempt = ?invoice.next_payment_attempt,
+                hosted_invoice_url = ?invoice.hosted_invoice_url,
+                payment_intent = ?invoice.payment_intent,
+                status = %status,
+                "subscriptions: invoice payment failed; subscription marked past due"
+            );
+        } else {
+            info!(
+                stripe_event_id = ?event.id,
+                invoice_id = ?invoice.id,
+                subscription_id = %subscription_id,
+                status = %status,
+                "subscriptions: updating status from invoice webhook"
+            );
+        }
 
         self.subscription_repo
             .update_status_by_provider_subscription_id(&subscription_id, status)
             .await
             .map_err(|err| {
                 error!(
+                    stripe_event_id = ?event.id,
                     subscription_id = %subscription_id,
                     db_error = ?err,
                     "subscriptions: failed to update subscription status from invoice webhook"

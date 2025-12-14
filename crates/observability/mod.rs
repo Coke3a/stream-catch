@@ -11,10 +11,10 @@ use notifier::Notifier;
 use std::sync::Arc;
 use tracing::info;
 use tracing::warn;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 pub fn init_observability(component: &str) -> Result<()> {
     let config = ObservabilityConfig::from_env(component);

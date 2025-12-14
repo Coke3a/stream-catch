@@ -36,25 +36,27 @@ impl RecordingCleanupRepository for RecordingCleanupPostgres {
         // stalling Tokio under load.
         let db_pool = Arc::clone(&self.db_pool);
 
-        Ok(task::spawn_blocking(move || -> Result<Vec<RecordingEntity>> {
-            let mut conn = db_pool.get()?;
+        Ok(
+            task::spawn_blocking(move || -> Result<Vec<RecordingEntity>> {
+                let mut conn = db_pool.get()?;
 
-            let mut query = recordings::table
-                .select(RecordingEntity::as_select())
-                .filter(recordings::status.eq(RecordingStatus::Ready.to_string()))
-                .filter(recordings::started_at.lt(older_than))
-                .filter(recordings::storage_path.is_not_null())
-                .order(recordings::started_at.asc())
-                .into_boxed();
+                let mut query = recordings::table
+                    .select(RecordingEntity::as_select())
+                    .filter(recordings::status.eq(RecordingStatus::Ready.to_string()))
+                    .filter(recordings::started_at.lt(older_than))
+                    .filter(recordings::storage_path.is_not_null())
+                    .order(recordings::started_at.asc())
+                    .into_boxed();
 
-            if let Some(limit) = limit {
-                query = query.limit(limit);
-            }
+                if let Some(limit) = limit {
+                    query = query.limit(limit);
+                }
 
-            let result = query.load::<RecordingEntity>(&mut conn)?;
-            Ok(result)
-        })
-        .await??)
+                let result = query.load::<RecordingEntity>(&mut conn)?;
+                Ok(result)
+            })
+            .await??,
+        )
     }
 
     async fn mark_recording_expired_deleted(&self, recording_id: Uuid) -> Result<Uuid> {

@@ -1,5 +1,5 @@
 use super::notifier::{NotificationEvent, NotificationProvider};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chrono::SecondsFormat;
 use reqwest::Client;
@@ -35,9 +35,7 @@ impl DiscordWebhookProvider {
 
         lines.push(format!(
             "`{}` `{}`{}",
-            event
-                .timestamp
-                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            event.timestamp.to_rfc3339_opts(SecondsFormat::Secs, true),
             event.target,
             match (&event.file, event.line) {
                 (Some(file), Some(line)) => format!(" `{}:{}`", file, line),

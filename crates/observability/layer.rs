@@ -4,9 +4,9 @@ use chrono::Utc;
 use std::collections::BTreeMap;
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::Layer;
 
 #[derive(Clone)]
 pub(crate) struct ErrorNotifyLayer {
@@ -16,7 +16,11 @@ pub(crate) struct ErrorNotifyLayer {
 }
 
 impl ErrorNotifyLayer {
-    pub(crate) fn new(notifier: Notifier, service_context: ServiceContext, min_level: Level) -> Self {
+    pub(crate) fn new(
+        notifier: Notifier,
+        service_context: ServiceContext,
+        min_level: Level,
+    ) -> Self {
         Self {
             notifier,
             service_context,
@@ -32,28 +36,38 @@ struct FieldMapVisitor {
 
 impl Visit for FieldMapVisitor {
     fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.values
-            .insert(field.name().to_string(), redact(field.name(), format!("{value:?}")));
+        self.values.insert(
+            field.name().to_string(),
+            redact(field.name(), format!("{value:?}")),
+        );
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {
-        self.values
-            .insert(field.name().to_string(), redact(field.name(), value.to_string()));
+        self.values.insert(
+            field.name().to_string(),
+            redact(field.name(), value.to_string()),
+        );
     }
 
     fn record_i64(&mut self, field: &Field, value: i64) {
-        self.values
-            .insert(field.name().to_string(), redact(field.name(), value.to_string()));
+        self.values.insert(
+            field.name().to_string(),
+            redact(field.name(), value.to_string()),
+        );
     }
 
     fn record_u64(&mut self, field: &Field, value: u64) {
-        self.values
-            .insert(field.name().to_string(), redact(field.name(), value.to_string()));
+        self.values.insert(
+            field.name().to_string(),
+            redact(field.name(), value.to_string()),
+        );
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
-        self.values
-            .insert(field.name().to_string(), redact(field.name(), value.to_string()));
+        self.values.insert(
+            field.name().to_string(),
+            redact(field.name(), value.to_string()),
+        );
     }
 }
 
@@ -66,7 +80,12 @@ impl<S> Layer<S> for ErrorNotifyLayer
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    fn on_new_span(&self, attrs: &tracing::span::Attributes<'_>, id: &tracing::span::Id, ctx: Context<'_, S>) {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        id: &tracing::span::Id,
+        ctx: Context<'_, S>,
+    ) {
         let mut visitor = FieldMapVisitor::default();
         attrs.record(&mut visitor);
 
@@ -75,12 +94,18 @@ where
         }
 
         if let Some(span) = ctx.span(id) {
-            span.extensions_mut()
-                .insert(SpanFieldMap { values: visitor.values });
+            span.extensions_mut().insert(SpanFieldMap {
+                values: visitor.values,
+            });
         }
     }
 
-    fn on_record(&self, id: &tracing::span::Id, values: &tracing::span::Record<'_>, ctx: Context<'_, S>) {
+    fn on_record(
+        &self,
+        id: &tracing::span::Id,
+        values: &tracing::span::Record<'_>,
+        ctx: Context<'_, S>,
+    ) {
         let Some(span) = ctx.span(id) else {
             return;
         };
@@ -99,7 +124,9 @@ where
                 existing.values.extend(visitor.values);
             }
             None => {
-                extensions.insert(SpanFieldMap { values: visitor.values });
+                extensions.insert(SpanFieldMap {
+                    values: visitor.values,
+                });
             }
         }
     }

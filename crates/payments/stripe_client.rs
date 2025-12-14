@@ -20,9 +20,24 @@ pub struct StripeClient {
 
 #[derive(Debug, Deserialize)]
 pub struct StripeEvent {
+    pub id: Option<String>,
     #[serde(rename = "type")]
     pub type_: String,
+    pub created: Option<i64>,
+    pub livemode: Option<bool>,
+    pub api_version: Option<String>,
+    pub request: Option<StripeEventRequest>,
     pub data: StripeEventData,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum StripeEventRequest {
+    Id(String),
+    Details {
+        id: Option<String>,
+        idempotency_key: Option<String>,
+    },
 }
 
 #[derive(Debug, Deserialize)]

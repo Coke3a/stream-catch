@@ -15,4 +15,3 @@ pub trait RecordingCleanupRepository {
 
     async fn mark_recording_expired_deleted(&self, recording_id: Uuid) -> Result<Uuid>;
 }
-

@@ -13,10 +13,10 @@ use uuid::Uuid;
 
 use crate::{
     config::config_model::DotEnvyConfig,
-    usecases::cleanup_expired_recordings::{CleanupExpiredRecordingsParams, CleanupExpiredRecordingsUseCase},
+    usecases::cleanup_expired_recordings::{
+        CleanupExpiredRecordingsParams, CleanupExpiredRecordingsUseCase,
+    },
 };
-
-
 
 // Run example
 //   curl -X POST "http://localhost:$SERVER_PORT_WORKER/internal/v1/cleanup/recordings" \
@@ -24,17 +24,13 @@ use crate::{
 //     -H "Content-Type: application/json" \
 //     -d '{"older_than_days":60,"limit":100,"dry_run":true}'
 
-
 #[derive(Clone)]
 pub struct CleanupRouteState {
     config: Arc<DotEnvyConfig>,
     usecase: Arc<CleanupExpiredRecordingsUseCase>,
 }
 
-pub fn routes(
-    config: Arc<DotEnvyConfig>,
-    usecase: Arc<CleanupExpiredRecordingsUseCase>,
-) -> Router {
+pub fn routes(config: Arc<DotEnvyConfig>, usecase: Arc<CleanupExpiredRecordingsUseCase>) -> Router {
     Router::new()
         .route("/recordings", post(cleanup_recordings))
         .with_state(CleanupRouteState { config, usecase })
@@ -127,4 +123,3 @@ fn authorize_bearer(headers: &HeaderMap, expected_token: &str) -> Result<(), Sta
         Err(StatusCode::UNAUTHORIZED)
     }
 }
-

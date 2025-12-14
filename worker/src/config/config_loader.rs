@@ -61,12 +61,10 @@ pub fn load() -> Result<DotEnvyConfig> {
     };
 
     let cleanup = Cleanup {
-        internal_token: std::env::var("INTERNAL_CLEANUP_TOKEN")
-            .ok()
-            .and_then(|v| {
-                let trimmed = v.trim().to_string();
-                (!trimmed.is_empty()).then_some(trimmed)
-            }),
+        internal_token: std::env::var("INTERNAL_CLEANUP_TOKEN").ok().and_then(|v| {
+            let trimmed = v.trim().to_string();
+            (!trimmed.is_empty()).then_some(trimmed)
+        }),
         default_retention_days: std::env::var("CLEANUP_DEFAULT_RETENTION_DAYS")
             .ok()
             .and_then(|v| v.parse::<i64>().ok())

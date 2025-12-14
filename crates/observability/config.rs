@@ -31,7 +31,8 @@ impl ObservabilityConfig {
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| component.clone());
 
-        let environment = env_string("STAGE").filter(|v| !v.is_empty())
+        let environment = env_string("STAGE")
+            .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "unknown".to_string());
 
         let service_context = ServiceContext {
@@ -96,8 +97,8 @@ fn discord_from_env() -> (Option<DiscordConfig>, Vec<String>) {
 
     (
         Some(DiscordConfig {
-        webhook_url,
-        min_level,
+            webhook_url,
+            min_level,
         }),
         warnings,
     )

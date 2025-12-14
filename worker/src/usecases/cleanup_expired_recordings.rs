@@ -5,8 +5,8 @@ use crates::domain::repositories::{
     storage::{CoverStorageClient, StorageClient},
 };
 use std::sync::Arc;
-use tracing::{error, info};
 use tracing::warn;
+use tracing::{error, info};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -48,7 +48,10 @@ impl CleanupExpiredRecordingsUseCase {
         }
     }
 
-    pub async fn run(&self, params: CleanupExpiredRecordingsParams) -> Result<CleanupExpiredRecordingsResult> {
+    pub async fn run(
+        &self,
+        params: CleanupExpiredRecordingsParams,
+    ) -> Result<CleanupExpiredRecordingsResult> {
         let older_than_days = params.older_than_days.max(0);
         let older_than = Utc::now() - Duration::days(older_than_days);
         let limit = params.limit.filter(|l| *l > 0);

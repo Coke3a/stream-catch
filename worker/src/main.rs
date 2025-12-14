@@ -1,6 +1,7 @@
 use anyhow::Result;
 use crates::domain::repositories::{
-    job::JobRepository, live_account_recording_engine::LiveAccountRecordingEngineRepository,
+    job::JobRepository,
+    live_account_recording_engine::LiveAccountRecordingEngineRepository,
     recording_cleanup::RecordingCleanupRepository,
     recording_engine_webhook::RecordingEngineWebhookRepository,
     recording_upload::RecordingUploadRepository,
