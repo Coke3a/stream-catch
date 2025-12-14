@@ -19,6 +19,8 @@ pub(crate) struct DiscordConfig {
 pub(crate) struct ObservabilityConfig {
     pub(crate) service_context: ServiceContext,
     pub(crate) discord: Option<DiscordConfig>,
+    /// Warnings captured during config parsing so they can be logged after tracing is initialized.
+    pub(crate) warnings: Vec<String>,
 }
 
 impl ObservabilityConfig {
@@ -29,9 +31,7 @@ impl ObservabilityConfig {
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| component.clone());
 
-        let environment = env_string("APP_ENV")
-            .filter(|v| !v.is_empty())
-            .or_else(|| env_string("STAGE").filter(|v| !v.is_empty()))
+        let environment = env_string("STAGE").filter(|v| !v.is_empty())
             .unwrap_or_else(|| "unknown".to_string());
 
         let service_context = ServiceContext {
@@ -40,40 +40,67 @@ impl ObservabilityConfig {
             component,
         };
 
-        let discord = match discord_from_env() {
-            Ok(discord) => discord,
-            Err(_) => None,
-        };
+        // Collect parsing warnings instead of silently disabling optional sinks.
+        let (discord, warnings) = discord_from_env();
 
         Self {
             service_context,
             discord,
+            warnings,
         }
     }
 }
 
-fn discord_from_env() -> anyhow::Result<Option<DiscordConfig>> {
+fn discord_from_env() -> (Option<DiscordConfig>, Vec<String>) {
+    let mut warnings = Vec::new();
+
     let enabled = env_bool("DISCORD_NOTIFY_ENABLED").unwrap_or(true);
 
-    let webhook_url = match env_string("DISCORD_WEBHOOK_URL").filter(|v| !v.is_empty()) {
-        Some(raw) => Some(Url::parse(&raw)?),
-        None => None,
+    let webhook_url_raw = env_string("DISCORD_WEBHOOK_URL").filter(|v| !v.is_empty());
+    let webhook_url = if !enabled {
+        None
+    } else if let Some(raw) = webhook_url_raw.as_deref() {
+        match Url::parse(raw) {
+            Ok(url) => Some(url),
+            Err(err) => {
+                // Do not include the raw URL in logs (webhook URLs contain secrets).
+                warnings.push(format!(
+                    "DISCORD_WEBHOOK_URL is set but invalid; Discord notifications disabled (parse error: {err})"
+                ));
+                None
+            }
+        }
+    } else {
+        None
     };
 
     if !enabled || webhook_url.is_none() {
-        return Ok(None);
+        return (None, warnings);
     }
 
-    let min_level = env_string("DISCORD_NOTIFY_LEVEL")
-        .and_then(|v| parse_level(&v))
-        .unwrap_or(Level::ERROR);
+    let min_level = match env_string("DISCORD_NOTIFY_LEVEL") {
+        Some(raw) if !raw.trim().is_empty() => match parse_level(&raw) {
+            Some(level) => level,
+            None => {
+                // Make level misconfiguration visible during startup while staying non-fatal.
+                warnings.push(format!(
+                    "DISCORD_NOTIFY_LEVEL is invalid (value: {raw}); defaulting to ERROR"
+                ));
+                Level::ERROR
+            }
+        },
+        _ => Level::ERROR,
+    };
 
     let webhook_url = webhook_url.expect("checked above");
 
-    Ok(Some(DiscordConfig {
+    (
+        Some(DiscordConfig {
         webhook_url,
         min_level,
-    }))
+        }),
+        warnings,
+    )
 }
 
 fn parse_level(input: &str) -> Option<Level> {
@@ -99,4 +126,3 @@ fn env_bool(key: &str) -> Option<bool> {
         _ => None,
     }
 }
-

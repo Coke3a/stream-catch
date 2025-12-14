@@ -6,6 +6,7 @@ use crates::domain::repositories::{
 };
 use std::sync::Arc;
 use tracing::{error, info};
+use tracing::warn;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -75,17 +76,35 @@ impl CleanupExpiredRecordingsUseCase {
                 continue;
             }
 
-            if let Err(err) = self.video_storage.delete_object(&storage_path).await {
-                error!(
-                    recording_id = %recording.id,
-                    storage_path = %storage_path,
-                    error = ?err,
-                    "cleanup_recordings: failed to delete video object; skipping"
-                );
-                result.skipped_video_delete_failed += 1;
-                if result.skipped_ids.len() < 20 {
-                    result.skipped_ids.push(recording.id);
+            // next run must be idempotent and continue to the DB update even if the object is
+            // already missing.
+            let video_deleted = match self.video_storage.delete_object(&storage_path).await {
+                Ok(()) => true,
+                Err(err) if looks_like_missing_object_error(&err) => {
+                    warn!(
+                        recording_id = %recording.id,
+                        storage_path = %storage_path,
+                        error = ?err,
+                        "cleanup_recordings: video object already missing; continuing"
+                    );
+                    true
                 }
+                Err(err) => {
+                    error!(
+                        recording_id = %recording.id,
+                        storage_path = %storage_path,
+                        error = ?err,
+                        "cleanup_recordings: failed to delete video object; skipping"
+                    );
+                    result.skipped_video_delete_failed += 1;
+                    if result.skipped_ids.len() < 20 {
+                        result.skipped_ids.push(recording.id);
+                    }
+                    continue;
+                }
+            };
+
+            if !video_deleted {
                 continue;
             }
             result.deleted += 1;
@@ -138,3 +157,12 @@ impl CleanupExpiredRecordingsUseCase {
     }
 }
 
+fn looks_like_missing_object_error(err: &anyhow::Error) -> bool {
+    // We only have `anyhow::Error` at this layer; keep the check conservative and avoid
+    // hard-coding storage SDK types here.
+    let message = err.to_string().to_ascii_lowercase();
+    message.contains("status 404")
+        || message.contains("nosuchkey")
+        || message.contains("no such key")
+        || message.contains("notfound")
+}

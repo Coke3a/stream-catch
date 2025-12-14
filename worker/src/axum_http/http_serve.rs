@@ -77,6 +77,15 @@ async fn shutdown_signal() {
             .expect("Failed to install CTRL+C signal handler");
     };
 
+    // Issue #5: Support SIGTERM for graceful shutdown in Docker/K8s/Fly (Unix only).
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("Failed to install SIGTERM signal handler");
+        sigterm.recv().await;
+    };
+    #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
 
     tokio::select! {

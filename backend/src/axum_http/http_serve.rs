@@ -81,7 +81,13 @@ async fn shutdow_signal() {
             .expect("Failed to install CTRL+C signal handler");
     };
 
-    let terminate = std::future::pending::<()>();
+    #[cfg(unix)]
+    let terminate = async {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("Failed to install SIGTERM signal handler");
+        sigterm.recv().await;
+    };
 
     tokio::select! {
         _ = ctrl_c => info!("Received ctrl+C signal"),

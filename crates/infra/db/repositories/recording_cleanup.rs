@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use diesel::{RunQueryDsl, prelude::*, update};
 use std::sync::Arc;
+use tokio::task;
 use uuid::Uuid;
 
 use crate::{
@@ -31,37 +32,50 @@ impl RecordingCleanupRepository for RecordingCleanupPostgres {
         older_than: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<RecordingEntity>> {
-        let mut conn = Arc::clone(&self.db_pool).get()?;
+        // Issue #4: Diesel is synchronous; run DB work on the blocking threadpool to avoid
+        // stalling Tokio under load.
+        let db_pool = Arc::clone(&self.db_pool);
 
-        let mut query = recordings::table
-            .select(RecordingEntity::as_select())
-            .filter(recordings::status.eq(RecordingStatus::Ready.to_string()))
-            .filter(recordings::started_at.lt(older_than))
-            .filter(recordings::storage_path.is_not_null())
-            .order(recordings::started_at.asc())
-            .into_boxed();
+        Ok(task::spawn_blocking(move || -> Result<Vec<RecordingEntity>> {
+            let mut conn = db_pool.get()?;
 
-        if let Some(limit) = limit {
-            query = query.limit(limit);
-        }
+            let mut query = recordings::table
+                .select(RecordingEntity::as_select())
+                .filter(recordings::status.eq(RecordingStatus::Ready.to_string()))
+                .filter(recordings::started_at.lt(older_than))
+                .filter(recordings::storage_path.is_not_null())
+                .order(recordings::started_at.asc())
+                .into_boxed();
 
-        let result = query.load::<RecordingEntity>(&mut conn)?;
-        Ok(result)
+            if let Some(limit) = limit {
+                query = query.limit(limit);
+            }
+
+            let result = query.load::<RecordingEntity>(&mut conn)?;
+            Ok(result)
+        })
+        .await??)
     }
 
     async fn mark_recording_expired_deleted(&self, recording_id: Uuid) -> Result<Uuid> {
-        let mut conn = Arc::clone(&self.db_pool).get()?;
+        // Issue #4: Diesel is synchronous; run DB work on the blocking threadpool to avoid
+        // stalling Tokio under load.
+        let db_pool = Arc::clone(&self.db_pool);
         let now = Utc::now();
 
-        let updated_id = update(recordings::table.filter(recordings::id.eq(recording_id)))
-            .set((
-                recordings::status.eq(RecordingStatus::ExpiredDeleted.to_string()),
-                recordings::updated_at.eq(now),
-            ))
-            .returning(recordings::id)
-            .get_result::<Uuid>(&mut conn)?;
+        Ok(task::spawn_blocking(move || -> Result<Uuid> {
+            let mut conn = db_pool.get()?;
 
-        Ok(updated_id)
+            let updated_id = update(recordings::table.filter(recordings::id.eq(recording_id)))
+                .set((
+                    recordings::status.eq(RecordingStatus::ExpiredDeleted.to_string()),
+                    recordings::updated_at.eq(now),
+                ))
+                .returning(recordings::id)
+                .get_result::<Uuid>(&mut conn)?;
+
+            Ok(updated_id)
+        })
+        .await??)
     }
 }
-
