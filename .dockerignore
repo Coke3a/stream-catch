@@ -1,0 +1,17 @@
+.git
+.github
+target
+**/target
+
+.env
+.env.*
+!.env-example
+
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+
+Dockerfile~
+README.md~

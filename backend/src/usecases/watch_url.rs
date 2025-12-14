@@ -203,7 +203,7 @@ where
             uid: user_id.to_string(),
             exp: exp.timestamp() as usize,
             iat: now.timestamp() as usize,
-            iss: "streamcatch-backend".to_string(),
+            iss: "stream-rokuo-backend".to_string(),
         };
 
         encode(

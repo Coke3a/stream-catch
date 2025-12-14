@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  selenium:
+    image: selenium/standalone-chrome:latest
+    container_name: selenium-chrome
+    restart: unless-stopped
+    shm_size: 2g
+    # Internal-only; the worker should reach it at `http://selenium:4444`.
+    expose:
+      - "4444"
+    environment:
+      - SE_NODE_MAX_SESSIONS=1
+      - SE_NODE_SESSION_TIMEOUT=300
+    networks:
+      - orec-net
+
+  worker:
+    image: ghcr.io/<org>/stream-rokuo-worker:latest
+    # Alternative (local build on the VPS):
+    # build:
+    #   context: ../..
+    #   dockerfile: Dockerfile
+    #   target: runtime-worker
+    restart: unless-stopped
+    depends_on:
+      - selenium
+    env_file:
+      - .env
+    # `DATABASE_URL` in `.env` should point at your Supabase Postgres instance.
+    # Optional: expose the worker HTTP server (e.g. for webhooks)
+    # ports:
+    #   - "8081:8081"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Optional: enable if your image includes `curl` (not installed by default)
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${SERVER_PORT_WORKER}/health-check >/dev/null || exit 1"]
+    #   interval: 30s
+    #   timeout: 5s
+    #   retries: 3
+    #   start_period: 10s
+    networks:
+      - orec-net
+
+networks:
+  orec-net:
+    # Create once on the VPS: `docker network create orec-net`
+    external: true
