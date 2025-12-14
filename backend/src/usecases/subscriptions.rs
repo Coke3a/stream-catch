@@ -24,7 +24,7 @@ use crates::{
 };
 use serde::Deserialize;
 use thiserror::Error;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 #[cfg_attr(test, mockall::automock)]
