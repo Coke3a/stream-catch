@@ -24,6 +24,7 @@ use tokio::process::Command;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+use crate::config::config_model::RecordingEnginePaths;
 use domain::repositories::job::JobRepository;
 use domain::repositories::storage::CoverStorageClient;
 
@@ -31,6 +32,7 @@ pub struct RecordingEngineWebhookUseCase {
     repository: Arc<dyn RecordingEngineWebhookRepository + Send + Sync>,
     job_repository: Arc<dyn JobRepository + Send + Sync>,
     cover_storage: Arc<dyn CoverStorageClient + Send + Sync>,
+    recording_engine_paths: RecordingEnginePaths,
 }
 
 impl RecordingEngineWebhookUseCase {
@@ -38,11 +40,13 @@ impl RecordingEngineWebhookUseCase {
         repository: Arc<dyn RecordingEngineWebhookRepository + Send + Sync>,
         job_repository: Arc<dyn JobRepository + Send + Sync>,
         cover_storage: Arc<dyn CoverStorageClient + Send + Sync>,
+        recording_engine_paths: RecordingEnginePaths,
     ) -> Self {
         Self {
             repository,
             job_repository,
             cover_storage,
+            recording_engine_paths,
         }
     }
 
@@ -135,7 +139,8 @@ impl RecordingEngineWebhookUseCase {
             .output
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
-        let storage_path = Self::container_to_host_path(&storage_path_raw);
+        let storage_path =
+            Self::container_to_host_path(&storage_path_raw, &self.recording_engine_paths);
 
         let recording_id = if let Some(recording) = self
             .repository
@@ -371,14 +376,14 @@ impl RecordingEngineWebhookUseCase {
         .context("failed to join duration reader task")?
     }
 
-    fn container_to_host_path(container_path: &str) -> PathBuf {
-        let host_base = Path::new("/home/coke/projects-2/orec");
-        let prefix = "/app/";
+    fn container_to_host_path(container_path: &str, paths: &RecordingEnginePaths) -> PathBuf {
+        let prefix = paths.container_prefix.as_str();
+        let prefix_no_slash = prefix.trim_end_matches('/');
 
         if let Some(stripped) = container_path.strip_prefix(prefix) {
-            host_base.join(stripped)
-        } else if container_path == "/app" {
-            host_base.to_path_buf()
+            paths.host_base.join(stripped)
+        } else if container_path == prefix_no_slash {
+            paths.host_base.clone()
         } else {
             PathBuf::from(container_path)
         }

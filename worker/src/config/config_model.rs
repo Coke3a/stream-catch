@@ -1,4 +1,5 @@
 use crates::infra::storages::wasabi::WasabiStorageConfig;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct DotEnvyConfig {
@@ -7,6 +8,7 @@ pub struct DotEnvyConfig {
     pub supabase: Supabase,
     pub video_storage: WasabiStorageConfig,
     pub cleanup: Cleanup,
+    pub recording_engine_paths: RecordingEnginePaths,
 }
 
 #[derive(Debug, Clone)]
@@ -14,6 +16,12 @@ pub struct WorkerServer {
     pub port: u16,
     pub timeout: u64,
     pub body_limit: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RecordingEnginePaths {
+    pub host_base: PathBuf,
+    pub container_prefix: String,
 }
 
 #[derive(Debug, Clone)]

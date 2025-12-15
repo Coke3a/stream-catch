@@ -1,6 +1,8 @@
 use crate::config::stage::Stage;
 
-use super::config_model::{Cleanup, Database, DotEnvyConfig, Supabase, WorkerServer};
+use super::config_model::{
+    Cleanup, Database, DotEnvyConfig, RecordingEnginePaths, Supabase, WorkerServer,
+};
 use anyhow::Result;
 use crates::infra::storages::wasabi::WasabiStorageConfig;
 
@@ -72,12 +74,29 @@ pub fn load() -> Result<DotEnvyConfig> {
             .unwrap_or(60),
     };
 
+    let container_prefix =
+        std::env::var("RECORDING_ENGINE_CONTAINER_PREFIX").unwrap_or_else(|_| "/app/".to_string());
+    let container_prefix = container_prefix.trim().to_string();
+    let container_prefix = if container_prefix.ends_with('/') {
+        container_prefix
+    } else {
+        format!("{}/", container_prefix)
+    };
+
+    let recording_engine_paths = RecordingEnginePaths {
+        host_base: std::env::var("RECORDING_ENGINE_HOST_BASE_PATH")
+            .expect("RECORDING_ENGINE_HOST_BASE_PATH is invalid")
+            .into(),
+        container_prefix,
+    };
+
     Ok(DotEnvyConfig {
         worker_server,
         database,
         supabase,
         video_storage,
         cleanup,
+        recording_engine_paths,
     })
 }
 

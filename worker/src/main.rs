@@ -98,6 +98,7 @@ async fn run() -> Result<()> {
         recording_engine_webhook_repository,
         Arc::clone(&job_repository),
         Arc::clone(&cover_storage_client),
+        dotenvy_env.recording_engine_paths.clone(),
     ));
 
     let server_config = Arc::clone(&dotenvy_env);
