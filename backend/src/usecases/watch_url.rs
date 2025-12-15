@@ -156,13 +156,25 @@ where
             bail!("Recording exceeds retention window");
         }
 
-        let cutoff = Utc::now() - Duration::days(i64::from(retention_days));
-        if recording.started_at < cutoff {
+        let view_start_at = if follow.created_at > recording.started_at {
+            follow.created_at
+        } else {
+            recording.started_at
+        };
+        let view_end_at = view_start_at
+            .checked_add_signed(Duration::days(i64::from(retention_days)))
+            .context("failed to compute retention window")?;
+
+        let now = Utc::now();
+        if now < view_start_at || now >= view_end_at {
             warn!(
                 %user_id,
                 recording_id = %recording.id,
                 started_at = %recording.started_at,
-                cutoff = %cutoff,
+                follow_created_at = %follow.created_at,
+                view_start_at = %view_start_at,
+                view_end_at = %view_end_at,
+                now = %now,
                 retention_days,
                 "watch_url: recording outside retention window"
             );

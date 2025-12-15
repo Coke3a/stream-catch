@@ -9,5 +9,6 @@ pub mod recording_cleanup;
 pub mod recording_dashboard;
 pub mod recording_engine_webhook;
 pub mod recording_upload;
+pub mod recording_view;
 pub mod storage;
 pub mod subscriptions;

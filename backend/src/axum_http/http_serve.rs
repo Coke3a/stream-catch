@@ -39,6 +39,10 @@ pub async fn start(config: Arc<DotEnvyConfig>, db_pool: Arc<PgPoolSquad>) -> Res
             routers::subscriptions::routes(Arc::clone(&db_pool), Arc::clone(&config)),
         )
         .nest(
+            "/api/v1/recordings",
+            routers::recordings::routes(Arc::clone(&db_pool), Arc::clone(&config)),
+        )
+        .nest(
             "/api",
             routers::subscriptions::webhook_routes(Arc::clone(&db_pool), Arc::clone(&config)),
         )
