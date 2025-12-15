@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM docker.io/lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /app
 
 # Diesel (Postgres) needs libpq at build time.
@@ -29,7 +29,7 @@ COPY --from=deps /app/target /app/target
 COPY --from=deps /usr/local/cargo /usr/local/cargo
 RUN cargo build --release --package worker --bin worker
 
-FROM debian:trixie-slim AS runtime-backend
+FROM docker.io/library/debian:trixie-slim AS runtime-backend
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libpq5 \
@@ -40,7 +40,7 @@ COPY --from=build-backend /app/target/release/backend /usr/local/bin/backend
 USER app
 ENTRYPOINT ["/usr/local/bin/backend"]
 
-FROM debian:trixie-slim AS runtime-worker
+FROM docker.io/library/debian:trixie-slim AS runtime-worker
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libpq5 \

@@ -22,7 +22,7 @@ services:
       context: ../..
       dockerfile: Dockerfile
       target: runtime-worker
-    image: localhost/vps_worker:latest
+    image: vps_worker:latest
     container_name: stream-rokuo-worker
     restart: unless-stopped
     depends_on:
