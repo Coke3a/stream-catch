@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   selenium:
-    image: selenium/standalone-chrome:latest
+    image: docker.io/selenium/standalone-chrome:latest
     container_name: selenium-chrome
     restart: unless-stopped
     shm_size: 2g
