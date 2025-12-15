@@ -16,12 +16,13 @@ services:
       - orec-net
 
   worker:
-    image: ghcr.io/<org>/stream-rokuo-worker:latest
+    # image: ghcr.io/<org>/stream-rokuo-worker:latest
     # Alternative (local build on the VPS):
-    # build:
-    #   context: ../..
-    #   dockerfile: Dockerfile
-    #   target: runtime-worker
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime-worker
+    container_name: stream-rokuo-worker
     restart: unless-stopped
     depends_on:
       - selenium
