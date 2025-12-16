@@ -33,7 +33,10 @@ pub fn init_observability(component: &str) -> Result<()> {
     // Issue #1: Use EnvFilter (RUST_LOG) with a safe default to avoid forcing TRACE in production.
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    let fmt_layer = tracing_subscriber::fmt::layer();
+    // Default `SystemTime` formatter prints RFC3339 in UTC (`...Z`).
+    // Use local time so `TZ=Asia/Bangkok` shows `+07:00` in logs.
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339());
 
     tracing_subscriber::registry()
         .with(fmt_layer)

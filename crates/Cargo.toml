@@ -15,7 +15,7 @@ thirtyfour = "0.36.1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.40"
 # Enables `EnvFilter` for Issue #1 (default log level + RUST_LOG overrides).
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono"] }
 url = "2.5.0"
 diesel = { version = "2.2.4", features = ["postgres", "serde_json", "chrono", "uuid", "r2d2"] }
 aws-config = { version = "1.8.11", features = ["behavior-version-latest"] }
