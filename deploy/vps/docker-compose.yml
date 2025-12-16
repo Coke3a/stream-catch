@@ -14,6 +14,7 @@ services:
       - SE_NODE_SESSION_TIMEOUT=300
     networks:
       - orec-net
+      - monitor-net
 
   worker:
     # image: ghcr.io/<org>/stream-rokuo-worker:latest
