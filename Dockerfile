@@ -30,9 +30,13 @@ COPY --from=deps /usr/local/cargo /usr/local/cargo
 RUN cargo build --release --package worker --bin worker
 
 FROM docker.io/library/debian:trixie-slim AS runtime-backend
-RUN apt-get update && apt-get install -y --no-install-recommends \
+ENV TZ=Asia/Bangkok
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
     libpq5 \
+    tzdata \
+  && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+  && echo $TZ > /etc/timezone \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --uid 10001 --create-home app
@@ -41,13 +45,16 @@ USER app
 ENTRYPOINT ["/usr/local/bin/backend"]
 
 FROM docker.io/library/debian:trixie-slim AS runtime-worker
-RUN apt-get update && apt-get install -y --no-install-recommends \
+ENV TZ=Asia/Bangkok
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
     libpq5 \
+    tzdata \
+  && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+  && echo $TZ > /etc/timezone \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --uid 10001 --create-home app
 COPY --from=build-worker /app/target/release/worker /usr/local/bin/worker
 USER app
 ENTRYPOINT ["/usr/local/bin/worker"]
-
