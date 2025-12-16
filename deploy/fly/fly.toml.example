@@ -3,6 +3,7 @@ primary_region = "iad"
 
 [build]
   dockerfile = "Dockerfile"
+  build-target = "runtime-backend"
 
 [env]
   SERVER_PORT_BACKEND = "8080"
