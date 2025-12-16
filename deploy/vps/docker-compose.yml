@@ -47,8 +47,12 @@ services:
     #   start_period: 10s
     networks:
       - orec-net
+      - monitor-net
 
 networks:
   orec-net:
     # Create once on the VPS: `docker network create orec-net`
+    external: true
+  monitor-net:
+    # Create once on the VPS: `docker network create monitor-net`
     external: true
