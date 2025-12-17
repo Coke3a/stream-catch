@@ -34,7 +34,7 @@ pub async fn add_account_recording_engine(
 
 async fn initialize_driver() -> Result<WebDriver> {
     let caps = DesiredCapabilities::chrome();
-    let driver = WebDriver::new("http://localhost:4444", caps).await?;
+    let driver = WebDriver::new("http://selenium-chrome:4444", caps).await?;
     driver.maximize_window().await?;
     Ok(driver)
 }
@@ -48,7 +48,7 @@ async fn access_url(driver: &WebDriver) -> Result<()> {
             json!({"headers": {"Authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ="}}),
         )
         .await?;
-    let url_str = format!("http://orec:5202/channels/");
+    let url_str = format!("http://orec-orec-1:5202/channels/");
     let url = Url::parse(&url_str)?;
     driver.goto(url.as_str()).await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
