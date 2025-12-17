@@ -13,8 +13,7 @@ services:
       - SE_NODE_MAX_SESSIONS=1
       - SE_NODE_SESSION_TIMEOUT=300
     networks:
-      - orec-net
-      - monitor-net
+      - app-net
 
   worker:
     # image: ghcr.io/<org>/stream-rokuo-worker:latest
@@ -47,13 +46,8 @@ services:
     #   retries: 3
     #   start_period: 10s
     networks:
-      - orec-net
-      - monitor-net
+      - app-net
 
 networks:
-  orec-net:
-    # Create once on the VPS: `docker network create orec-net`
-    external: true
-  monitor-net:
-    # Create once on the VPS: `docker network create monitor-net`
+  app-net:
     external: true
