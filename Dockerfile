@@ -33,6 +33,7 @@ FROM docker.io/library/debian:trixie-slim AS runtime-backend
 ENV TZ=Asia/Bangkok
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
+    ffmpeg \
     libpq5 \
     tzdata \
   && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
