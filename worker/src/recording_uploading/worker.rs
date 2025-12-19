@@ -223,12 +223,12 @@ async fn delete_local_file_and_verify(
             );
         }
         Err(err) => {
-            return Err(err).with_context(|| {
-                format!(
-                    "failed to delete uploaded local file: {}",
-                    path.to_string_lossy()
-                )
-            });
+            let message = format!(
+                "failed to delete uploaded local file: {}: {}",
+                path.to_string_lossy(),
+                err
+            );
+            return Err(err).context(message);
         }
     }
 
