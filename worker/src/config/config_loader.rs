@@ -83,12 +83,7 @@ pub fn load() -> Result<DotEnvyConfig> {
         format!("{}/", container_prefix)
     };
 
-    let recording_engine_paths = RecordingEnginePaths {
-        host_base: std::env::var("RECORDING_ENGINE_HOST_BASE_PATH")
-            .expect("RECORDING_ENGINE_HOST_BASE_PATH is invalid")
-            .into(),
-        container_prefix,
-    };
+    let recording_engine_paths = RecordingEnginePaths { container_prefix };
 
     Ok(DotEnvyConfig {
         worker_server,

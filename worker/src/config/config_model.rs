@@ -1,5 +1,4 @@
 use crates::infra::storages::wasabi::WasabiStorageConfig;
-use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct DotEnvyConfig {
@@ -20,7 +19,6 @@ pub struct WorkerServer {
 
 #[derive(Debug, Clone)]
 pub struct RecordingEnginePaths {
-    pub host_base: PathBuf,
     pub container_prefix: String,
 }
 

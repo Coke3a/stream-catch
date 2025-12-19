@@ -16,7 +16,7 @@ use mp4::Mp4Reader;
 use std::{
     fs::{self, File},
     io::BufReader,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     str::FromStr,
     sync::Arc,
 };
@@ -140,7 +140,7 @@ impl RecordingEngineWebhookUseCase {
             .clone()
             .ok_or_else(|| anyhow::anyhow!("output storage path is required"))?;
         let storage_path =
-            Self::container_to_host_path(&storage_path_raw, &self.recording_engine_paths);
+            Self::container_to_host_path(&storage_path_raw, &self.recording_engine_paths)?;
 
         let recording_id = if let Some(recording) = self
             .repository
@@ -376,17 +376,28 @@ impl RecordingEngineWebhookUseCase {
         .context("failed to join duration reader task")?
     }
 
-    fn container_to_host_path(container_path: &str, paths: &RecordingEnginePaths) -> PathBuf {
-        let prefix = paths.container_prefix.as_str();
-        let prefix_no_slash = prefix.trim_end_matches('/');
+    fn container_to_host_path(container_path: &str, paths: &RecordingEnginePaths) -> Result<PathBuf> {
+        let prefix = Path::new(paths.container_prefix.as_str());
+        let container_path = Path::new(container_path);
+        let relative = container_path.strip_prefix(prefix).map_err(|_| {
+            anyhow::anyhow!(
+                "transmux output path is not under configured container prefix {}: {}",
+                paths.container_prefix,
+                container_path.display()
+            )
+        })?;
 
-        if let Some(stripped) = container_path.strip_prefix(prefix) {
-            paths.host_base.join(stripped)
-        } else if container_path == prefix_no_slash {
-            paths.host_base.clone()
-        } else {
-            PathBuf::from(container_path)
+        if relative
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+        {
+            bail!(
+                "transmux output path contains invalid traversal segments: {}",
+                container_path.display()
+            );
         }
+
+        Ok(Path::new("/rec").join(relative))
     }
 
     async fn generate_and_upload_cover_from_video(
@@ -510,5 +521,55 @@ impl RecordingEngineWebhookUseCase {
         );
 
         Ok(temp_thumbnail_path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn test_paths() -> RecordingEnginePaths {
+        RecordingEnginePaths {
+            container_prefix: "/app/rec".to_string(),
+        }
+    }
+
+    #[test]
+    fn container_to_host_path_maps_under_prefix() {
+        let mapped = RecordingEngineWebhookUseCase::container_to_host_path(
+            "/app/rec/tiktok/chan/2025-12-19/video.mp4",
+            &test_paths(),
+        )
+        .expect("expected valid path mapping");
+
+        assert_eq!(
+            mapped,
+            PathBuf::from("/rec/tiktok/chan/2025-12-19/video.mp4")
+        );
+    }
+
+    #[test]
+    fn container_to_host_path_rejects_outside_prefix() {
+        let err = RecordingEngineWebhookUseCase::container_to_host_path(
+            "/other/rec/tiktok/video.mp4",
+            &test_paths(),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("not under configured container prefix"));
+    }
+
+    #[test]
+    fn container_to_host_path_rejects_traversal() {
+        let err = RecordingEngineWebhookUseCase::container_to_host_path(
+            "/app/rec/../secrets.mp4",
+            &test_paths(),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("invalid traversal"));
     }
 }

@@ -38,6 +38,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    volumes:
+      - /home/app/apps/orec/rec:/rec
     # Optional: enable if your image includes `curl` (not installed by default)
     # healthcheck:
     #   test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${SERVER_PORT_WORKER}/health-check >/dev/null || exit 1"]
