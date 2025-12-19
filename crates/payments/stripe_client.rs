@@ -5,6 +5,7 @@ use hmac::{Hmac, Mac};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use sha2::Sha256;
+use tracing::error;
 use uuid::Uuid;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -54,6 +55,21 @@ pub struct StripeCheckoutSession {
     pub payment_intent: Option<String>,
     pub amount_total: Option<i64>,
     pub metadata: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeErrorEnvelope {
+    error: StripeErrorDetails,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeErrorDetails {
+    #[serde(rename = "type")]
+    type_: Option<String>,
+    code: Option<String>,
+    message: Option<String>,
+    param: Option<String>,
+    decline_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,6 +133,64 @@ impl StripeClient {
         }
     }
 
+    async fn ensure_success(
+        resp: reqwest::Response,
+        context: &str,
+    ) -> Result<reqwest::Response> {
+        if resp.status().is_success() {
+            return Ok(resp);
+        }
+
+        let status = resp.status();
+        let request_id = resp
+            .headers()
+            .get("request-id")
+            .or_else(|| resp.headers().get("stripe-request-id"))
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string());
+
+        let body = match resp.text().await {
+            Ok(text) if !text.is_empty() => text,
+            Ok(_) => "<empty response body>".to_string(),
+            Err(err) => format!("<failed to read response body: {err}>"),
+        };
+
+        let (stripe_error_type, stripe_error_code, stripe_error_param, stripe_error_message, stripe_decline_code) =
+            match serde_json::from_str::<StripeErrorEnvelope>(&body) {
+                Ok(envelope) => {
+                    let details = envelope.error;
+                    (
+                        details.type_,
+                        details.code,
+                        details.param,
+                        details.message,
+                        details.decline_code,
+                    )
+                }
+                Err(_) => (None, None, None, None, None),
+            };
+
+        error!(
+            status = %status,
+            stripe_request_id = ?request_id,
+            stripe_error_type = ?stripe_error_type,
+            stripe_error_code = ?stripe_error_code,
+            stripe_error_param = ?stripe_error_param,
+            stripe_error_message = ?stripe_error_message,
+            stripe_decline_code = ?stripe_decline_code,
+            response_body = %body,
+            context = %context,
+            "stripe api request failed"
+        );
+
+        anyhow::bail!(
+            "Stripe API request failed: {} (status {}, request_id={:?})",
+            context,
+            status,
+            request_id
+        );
+    }
+
     /// Creates or reuses a Stripe customer for the given email/user.
     pub async fn create_customer(&self, email: &str, user_id: Uuid) -> Result<String> {
         // See Stripe customer docs: https://stripe.com/docs/api/customers/create
@@ -132,8 +206,8 @@ impl StripeClient {
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(&body)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        let resp = Self::ensure_success(resp, "create customer").await?;
 
         #[derive(Deserialize)]
         struct CustomerResp {
@@ -181,8 +255,8 @@ impl StripeClient {
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(&body)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        let resp = Self::ensure_success(resp, "create checkout session").await?;
 
         #[derive(Deserialize)]
         struct CheckoutResp {
@@ -199,7 +273,8 @@ impl StripeClient {
     pub async fn cancel_subscription(&self, provider_subscription_id: &str) -> Result<()> {
         // https://stripe.com/docs/api/subscriptions/cancel#cancel_subscription-at_period_end
         let body = [("cancel_at_period_end", "true".to_string())];
-        self.http
+        let resp = self
+            .http
             .post(format!(
                 "https://api.stripe.com/v1/subscriptions/{}",
                 provider_subscription_id
@@ -208,8 +283,8 @@ impl StripeClient {
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(&body)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        Self::ensure_success(resp, "cancel subscription").await?;
 
         Ok(())
     }
@@ -264,8 +339,8 @@ impl StripeClient {
             ))
             .header(AUTHORIZATION, format!("Bearer {}", self.secret_key))
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        let resp = Self::ensure_success(resp, "retrieve subscription").await?;
 
         let subscription: StripeSubscription = resp.json().await?;
         Ok(subscription)
