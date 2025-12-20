@@ -173,16 +173,10 @@ where
             // Case 2: live account does NOT exist → create both
             // ─────────────────────────────────────────────
             Err(err) => {
-                error!(
-                    %user_id,
-                    platform = %platform,
-                    account_id,
-                    db_error = ?err,
-                    "live_following: failed to find live account, proceeding to create new"
-                );
                 info!(
                     platform = %platform,
                     account_id,
+                    db_error = ?err,
                     "live_following: creating new live account and follow"
                 );
 
