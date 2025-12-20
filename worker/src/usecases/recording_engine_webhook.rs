@@ -7,7 +7,8 @@ use domain::{
     value_objects::{
         enums::{platforms::Platform, recording_statuses::RecordingStatus},
         recording_engine_webhook::{
-            RecordingEngineLiveStartWebhook, RecordingEngineTransmuxFinishWebhook,
+            RecordingEngineErrorWebhook, RecordingEngineLiveStartWebhook,
+            RecordingEngineTransmuxFinishWebhook,
         },
         recordings::InsertRecordingModel,
     },
@@ -339,6 +340,25 @@ impl RecordingEngineWebhookUseCase {
                 );
                 err
             })
+    }
+
+    pub async fn handle_error(&self, payload: RecordingEngineErrorWebhook) -> Result<Uuid> {
+        let data = payload.data;
+        let platform = data.platform.as_deref().unwrap_or("unknown");
+        let channel = data.channel.as_deref().unwrap_or("unknown");
+        let error_message = data.error.as_deref().unwrap_or("missing error");
+
+        error!(
+            payload_id = %payload.id,
+            payload_ts = %payload.ts,
+            payload_type = %payload.type_,
+            platform,
+            channel,
+            error = %error_message,
+            "recording_engine_webhook: error received"
+        );
+
+        Ok(payload.id)
     }
 
     fn parse_platform(&self, platform: Option<String>) -> Result<Platform> {

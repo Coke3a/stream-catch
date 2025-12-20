@@ -75,6 +75,23 @@ pub struct TransmuxFinishData {
     pub output: Option<String>,
 }
 
+// error webhook
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RecordingEngineErrorWebhook {
+    pub id: Uuid,
+    pub ts: DateTime<Utc>,
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub data: ErrorData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ErrorData {
+    pub platform: Option<String>,
+    pub channel: Option<String>,
+    pub error: Option<String>,
+}
+
 // live info
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LiveInfo {

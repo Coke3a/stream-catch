@@ -9,7 +9,8 @@ use axum::{
 };
 use crates::domain;
 use domain::value_objects::recording_engine_webhook::{
-    RecordingEngineFileFinishWebhook, RecordingEngineLiveStartWebhook,
+    RecordingEngineErrorWebhook, RecordingEngineFileFinishWebhook,
+    RecordingEngineLiveStartWebhook,
     RecordingEngineTransmuxFinishWebhook,
 };
 use tracing::{error, info};
@@ -22,6 +23,7 @@ pub fn routes(usecase: Arc<RecordingEngineWebhookUseCase>) -> Router {
         .route("/live-start", post(live_start))
         .route("/video-transmux-finish", post(video_transmux_finish))
         .route("/video-uploading", post(video_uploading))
+        .route("/error", post(error_webhook))
         .with_state(usecase)
 }
 
@@ -67,6 +69,20 @@ pub async fn video_uploading(
     {
         Ok(recording_id) => success_response(recording_id),
         Err(err) => map_error("video_uploading", err),
+    }
+}
+
+pub async fn error_webhook(
+    State(usecase): State<Arc<RecordingEngineWebhookUseCase>>,
+    Json(payload): Json<RecordingEngineErrorWebhook>,
+) -> Response {
+    info!(
+        payload = ?payload,
+        "recording_engine_webhook: error received"
+    );
+    match usecase.handle_error(payload).await {
+        Ok(recording_id) => success_response(recording_id),
+        Err(err) => map_error("error", err),
     }
 }
 
