@@ -29,8 +29,8 @@ impl RecordingViewPostgres {
     fn view_window_filter_sql(retention_days: i64) -> String {
         let retention_days = retention_days.max(0);
         format!(
-            "now() >= GREATEST(follows.created_at, recordings.started_at) \
-             AND now() < (GREATEST(follows.created_at, recordings.started_at) + (INTERVAL '1 day' * {}))",
+            "now() >= recordings.started_at \
+             AND now() < (recordings.started_at + (INTERVAL '1 day' * {}))",
             retention_days
         )
     }
