@@ -93,8 +93,6 @@ impl RecordingViewRepository for RecordingViewPostgres {
         let statuses = vec![
             RecordingStatus::LiveRecording.to_string(),
             RecordingStatus::LiveEnd.to_string(),
-            RecordingStatus::WaitingUpload.to_string(),
-            RecordingStatus::Uploading.to_string(),
         ];
 
         let live_account_ids = recordings::table
@@ -138,8 +136,6 @@ impl RecordingViewRepository for RecordingViewPostgres {
         let statuses = vec![
             RecordingStatus::LiveRecording.to_string(),
             RecordingStatus::LiveEnd.to_string(),
-            RecordingStatus::WaitingUpload.to_string(),
-            RecordingStatus::Uploading.to_string(),
         ];
 
         let total = recordings::table
