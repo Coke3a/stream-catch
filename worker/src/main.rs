@@ -129,6 +129,7 @@ async fn run() -> Result<()> {
         job_repository,
         recording_upload_repository,
         Arc::clone(&video_storage_client),
+        dotenvy_env.recording_upload.clone(),
     ));
 
     tokio::select! {

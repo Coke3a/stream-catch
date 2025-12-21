@@ -6,8 +6,10 @@ use aws_credential_types::Credentials;
 use aws_sdk_s3::{
     Client,
     config::{Region, StalledStreamProtectionConfig},
+    error::SdkError,
 };
 use http::Uri;
+use std::error::Error as StdError;
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
@@ -32,6 +34,80 @@ impl S3Config {
             connect_timeout_secs: 10,
             read_timeout_secs: 60,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct StorageUploadError {
+    retryable: bool,
+    message: String,
+    source: Option<anyhow::Error>,
+}
+
+impl StorageUploadError {
+    pub fn retryable(message: impl Into<String>) -> anyhow::Error {
+        anyhow::Error::new(Self {
+            retryable: true,
+            message: message.into(),
+            source: None,
+        })
+    }
+
+    pub fn retryable_with_source(message: impl Into<String>, source: anyhow::Error) -> anyhow::Error {
+        anyhow::Error::new(Self {
+            retryable: true,
+            message: message.into(),
+            source: Some(source),
+        })
+    }
+
+    pub fn non_retryable(message: impl Into<String>) -> anyhow::Error {
+        anyhow::Error::new(Self {
+            retryable: false,
+            message: message.into(),
+            source: None,
+        })
+    }
+
+    pub fn non_retryable_with_source(
+        message: impl Into<String>,
+        source: anyhow::Error,
+    ) -> anyhow::Error {
+        anyhow::Error::new(Self {
+            retryable: false,
+            message: message.into(),
+            source: Some(source),
+        })
+    }
+
+    pub fn is_retryable(&self) -> bool {
+        self.retryable
+    }
+}
+
+impl std::fmt::Display for StorageUploadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl StdError for StorageUploadError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.source.as_ref().map(|err| err.as_ref())
+    }
+}
+
+pub fn is_retryable_s3_error<E>(err: &SdkError<E>) -> bool {
+    match err {
+        SdkError::TimeoutError(_) => true,
+        SdkError::DispatchFailure(_) => true,
+        SdkError::ResponseError(_) => true,
+        SdkError::ServiceError(service_err) => {
+            let status = service_err.raw().status().as_u16();
+            matches!(status, 408 | 429) || (500..=599).contains(&status)
+        }
+        SdkError::ConstructionFailure(_) => false,
+        _ => false,
     }
 }
 

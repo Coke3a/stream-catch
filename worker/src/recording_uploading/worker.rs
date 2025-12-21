@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use crate::config::config_model::RecordingUploadConfig;
 use crates::domain::{
     entities::jobs::JobEntity,
     repositories::{
@@ -7,45 +8,99 @@ use crates::domain::{
     value_objects::enums::recording_statuses::RecordingStatus,
     value_objects::recording_upload::RecordingUploadPayload,
 };
+use crates::infra::storages::s3::StorageUploadError;
 use std::{io::ErrorKind, path::Path, path::PathBuf, sync::Arc, time::Duration};
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tracing::{error, info, warn};
+
+const MAX_ATTEMPTS: i32 = 5;
 
 pub async fn run(
     job_repo: Arc<dyn JobRepository + Send + Sync>,
     recording_repo: Arc<dyn RecordingUploadRepository + Send + Sync>,
     storage: Arc<dyn StorageClient + Send + Sync>,
+    config: RecordingUploadConfig,
 ) -> Result<()> {
     info!("recording_upload: starting worker loop");
+    if config.max_files_in_flight == 0 {
+        anyhow::bail!("WASABI_UPLOAD_MAX_FILES_IN_FLIGHT must be >= 1");
+    }
+
+    let file_limiter = Arc::new(Semaphore::new(config.max_files_in_flight));
+    let mut join_set = JoinSet::new();
+
     loop {
+        while let Some(result) = join_set.try_join_next() {
+            if let Err(err) = result {
+                error!(error = %err, "recording_upload: job task panicked");
+            }
+        }
+
+        if join_set.len() >= config.max_files_in_flight {
+            if let Some(result) = join_set.join_next().await {
+                if let Err(err) = result {
+                    error!(error = %err, "recording_upload: job task panicked");
+                }
+            }
+            continue;
+        }
+
+        let permit = match file_limiter.clone().acquire_owned().await {
+            Ok(permit) => permit,
+            Err(err) => {
+                error!(error = %err, "recording_upload: file limiter closed");
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+        };
+
         match job_repo.lock_next_recording_upload_job().await {
             Ok(Some(job)) => {
                 info!(job_id = %job.id, "recording_upload: processing job");
-                if let Err(e) =
-                    process_recording_upload_job(&job_repo, &recording_repo, &storage, &job).await
-                {
-                    error!(
-                        job_id = %job.id,
-                        error = %e,
-                        "recording_upload: failed to process job"
-                    );
-                    if let Err(mark_err) = job_repo
-                        .mark_job_failed(job.id, &e.to_string(), 5) // MAX_ATTEMPTS = 5
-                        .await
+                let job_repo = Arc::clone(&job_repo);
+                let recording_repo = Arc::clone(&recording_repo);
+                let storage = Arc::clone(&storage);
+                join_set.spawn(async move {
+                    let _permit = permit;
+                    if let Err(e) =
+                        process_recording_upload_job(&job_repo, &recording_repo, &storage, &job)
+                            .await
                     {
+                        let max_attempts = resolve_job_max_attempts(&e, MAX_ATTEMPTS);
+                        if max_attempts == 1 {
+                            warn!(
+                                job_id = %job.id,
+                                error = %e,
+                                "recording_upload: non-retryable failure; marking job dead"
+                            );
+                        }
                         error!(
                             job_id = %job.id,
-                            error = %mark_err,
-                            "recording_upload: failed to mark job as failed"
+                            error = %e,
+                            "recording_upload: failed to process job"
                         );
+                        if let Err(mark_err) = job_repo
+                            .mark_job_failed(job.id, &e.to_string(), max_attempts)
+                            .await
+                        {
+                            error!(
+                                job_id = %job.id,
+                                error = %mark_err,
+                                "recording_upload: failed to mark job as failed"
+                            );
+                        }
+                    } else {
+                        info!(job_id = %job.id, "recording_upload: job processed successfully");
                     }
-                } else {
-                    info!(job_id = %job.id, "recording_upload: job processed successfully");
-                }
+                });
             }
             Ok(None) => {
+                drop(permit);
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
             Err(e) => {
+                drop(permit);
                 error!(
                     error = %e,
                     "recording_upload: error locking next job"
@@ -63,6 +118,12 @@ async fn process_recording_upload_job(
     job: &JobEntity,
 ) -> Result<()> {
     let payload: RecordingUploadPayload = serde_json::from_value(job.payload.clone())?;
+    let span = tracing::info_span!(
+        "recording_upload_job",
+        job_id = %job.id,
+        recording_id = %payload.recording_id
+    );
+    let _guard = span.enter();
 
     let recording = recording_repo
         .find_recording_by_id(payload.recording_id)
@@ -198,6 +259,13 @@ async fn process_recording_upload_job(
     })?;
 
     Ok(())
+}
+
+fn resolve_job_max_attempts(err: &anyhow::Error, default_max: i32) -> i32 {
+    match err.downcast_ref::<StorageUploadError>() {
+        Some(upload_err) if !upload_err.is_retryable() => 1,
+        _ => default_max,
+    }
 }
 
 async fn delete_local_file_and_verify(

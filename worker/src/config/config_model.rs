@@ -6,6 +6,7 @@ pub struct DotEnvyConfig {
     pub database: Database,
     pub supabase: Supabase,
     pub video_storage: WasabiStorageConfig,
+    pub recording_upload: RecordingUploadConfig,
     pub cleanup: Cleanup,
     pub recording_engine_paths: RecordingEnginePaths,
 }
@@ -42,4 +43,9 @@ pub struct Supabase {
 pub struct Cleanup {
     pub internal_token: Option<String>,
     pub default_retention_days: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RecordingUploadConfig {
+    pub max_files_in_flight: usize,
 }

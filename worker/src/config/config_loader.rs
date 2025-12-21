@@ -1,10 +1,11 @@
 use crate::config::stage::Stage;
 
 use super::config_model::{
-    Cleanup, Database, DotEnvyConfig, RecordingEnginePaths, Supabase, WorkerServer,
+    Cleanup, Database, DotEnvyConfig, RecordingEnginePaths, RecordingUploadConfig, Supabase,
+    WorkerServer,
 };
-use anyhow::Result;
-use crates::infra::storages::wasabi::WasabiStorageConfig;
+use anyhow::{Context, Result};
+use crates::infra::storages::wasabi::{WasabiMultipartConfig, WasabiStorageConfig};
 
 pub fn load() -> Result<DotEnvyConfig> {
     dotenvy::dotenv().ok();
@@ -47,6 +48,14 @@ pub fn load() -> Result<DotEnvyConfig> {
         url: std::env::var("DATABASE_URL").expect("DATABASE_URL is invalid"),
     };
 
+    let multipart_part_size_mb = std::env::var("VIDEO_STORAGE_MULTIPART_PART_SIZE_MB")
+        .unwrap_or_else(|_| "128".to_string())
+        .parse::<u64>()
+        .context("VIDEO_STORAGE_MULTIPART_PART_SIZE_MB is invalid")?;
+    let multipart_part_size_bytes = multipart_part_size_mb
+        .checked_mul(1024 * 1024)
+        .context("VIDEO_STORAGE_MULTIPART_PART_SIZE_MB is too large")?;
+
     let video_storage = WasabiStorageConfig {
         endpoint: std::env::var("VIDEO_STORAGE_S3_ENDPOINT")
             .expect("VIDEO_STORAGE_S3_ENDPOINT is invalid"),
@@ -60,6 +69,44 @@ pub fn load() -> Result<DotEnvyConfig> {
             .expect("VIDEO_STORAGE_S3_SECRET_ACCESS_KEY is invalid"),
         key_prefix: std::env::var("VIDEO_STORAGE_S3_KEY_PREFIX")
             .unwrap_or_else(|_| "recordings".to_string()),
+        multipart: WasabiMultipartConfig {
+            enabled: std::env::var("VIDEO_STORAGE_MULTIPART_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_ENABLED is invalid")?,
+            threshold_bytes: std::env::var("VIDEO_STORAGE_MULTIPART_THRESHOLD_BYTES")
+                .unwrap_or_else(|_| "268435456".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_THRESHOLD_BYTES is invalid")?,
+            part_size_bytes: multipart_part_size_bytes,
+            per_file_concurrency: std::env::var("VIDEO_STORAGE_MULTIPART_PER_FILE_CONCURRENCY")
+                .unwrap_or_else(|_| "4".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_PER_FILE_CONCURRENCY is invalid")?,
+            global_concurrency: std::env::var("VIDEO_STORAGE_MULTIPART_GLOBAL_CONCURRENCY")
+                .unwrap_or_else(|_| "8".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_GLOBAL_CONCURRENCY is invalid")?,
+            max_retries: std::env::var("VIDEO_STORAGE_MULTIPART_MAX_RETRIES")
+                .unwrap_or_else(|_| "5".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_MAX_RETRIES is invalid")?,
+            backoff_base_ms: std::env::var("VIDEO_STORAGE_MULTIPART_BACKOFF_BASE_MS")
+                .unwrap_or_else(|_| "500".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_BACKOFF_BASE_MS is invalid")?,
+            backoff_max_ms: std::env::var("VIDEO_STORAGE_MULTIPART_BACKOFF_MAX_MS")
+                .unwrap_or_else(|_| "15000".to_string())
+                .parse()
+                .context("VIDEO_STORAGE_MULTIPART_BACKOFF_MAX_MS is invalid")?,
+        },
+    };
+
+    let recording_upload = RecordingUploadConfig {
+        max_files_in_flight: std::env::var("WASABI_UPLOAD_MAX_FILES_IN_FLIGHT")
+            .unwrap_or_else(|_| "1".to_string())
+            .parse()
+            .context("WASABI_UPLOAD_MAX_FILES_IN_FLIGHT is invalid")?,
     };
 
     let cleanup = Cleanup {
@@ -90,6 +137,7 @@ pub fn load() -> Result<DotEnvyConfig> {
         database,
         supabase,
         video_storage,
+        recording_upload,
         cleanup,
         recording_engine_paths,
     })
