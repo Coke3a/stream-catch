@@ -1086,6 +1086,39 @@ where
             next_payment_attempt: Option<i64>,
             hosted_invoice_url: Option<String>,
             payment_intent: Option<String>,
+            parent: Option<InvoiceParent>,
+            lines: Option<InvoiceLines>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceParent {
+            subscription_details: Option<InvoiceSubscriptionDetails>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceSubscriptionDetails {
+            subscription: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceLines {
+            #[serde(default)]
+            data: Vec<InvoiceLine>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceLine {
+            parent: Option<InvoiceLineParent>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceLineParent {
+            subscription_item_details: Option<InvoiceLineSubscriptionItemDetails>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceLineSubscriptionItemDetails {
+            subscription: Option<String>,
         }
 
         let invoice: InvoiceObject =
@@ -1099,16 +1132,40 @@ where
                 SubscriptionError::InvalidWebhook("invalid invoice payload".to_string())
             })?;
 
-        let subscription_id = invoice.subscription.ok_or_else(|| {
-            let err =
-                SubscriptionError::InvalidWebhook("invoice missing subscription id".to_string());
-            error!(
-                stripe_event_id = ?event.id,
-                status = err.status_code().as_u16(),
-                "subscriptions: invoice webhook missing subscription id"
-            );
-            err
-        })?;
+        let subscription_id = invoice
+            .subscription
+            .clone()
+            .or_else(|| {
+                invoice.parent.as_ref().and_then(|parent| {
+                    parent
+                        .subscription_details
+                        .as_ref()
+                        .and_then(|details| details.subscription.clone())
+                })
+            })
+            .or_else(|| {
+                invoice.lines.as_ref().and_then(|lines| {
+                    lines.data.iter().find_map(|line| {
+                        line.parent.as_ref().and_then(|parent| {
+                            parent
+                                .subscription_item_details
+                                .as_ref()
+                                .and_then(|details| details.subscription.clone())
+                        })
+                    })
+                })
+            })
+            .ok_or_else(|| {
+                let err = SubscriptionError::InvalidWebhook(
+                    "invoice missing subscription id".to_string(),
+                );
+                error!(
+                    stripe_event_id = ?event.id,
+                    status = err.status_code().as_u16(),
+                    "subscriptions: invoice webhook missing subscription id"
+                );
+                err
+            })?;
 
         if status == SubscriptionStatus::PastDue {
             error!(
