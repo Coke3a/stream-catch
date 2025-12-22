@@ -85,6 +85,8 @@ pub enum SubscriptionError {
     MissingEmail,
     #[error("invalid webhook payload: {0}")]
     InvalidWebhook(String),
+    #[error("webhook retry later: {0}")]
+    WebhookRetry(&'static str),
     #[error("no active subscription to cancel")]
     SubscriptionNotFound,
     #[error(transparent)]
@@ -100,6 +102,7 @@ impl SubscriptionError {
             | SubscriptionError::InvalidCombination(_)
             | SubscriptionError::MissingEmail
             | SubscriptionError::InvalidWebhook(_) => StatusCode::BAD_REQUEST,
+            SubscriptionError::WebhookRetry(_) => StatusCode::CONFLICT,
             SubscriptionError::SubscriptionNotFound => StatusCode::NOT_FOUND,
             SubscriptionError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -1758,9 +1761,9 @@ where
                 subscription_id = %context.subscription_id,
                 "subscriptions: invoice payment succeeded without local subscription"
             );
-            return Err(SubscriptionError::Internal(anyhow!(
-                "subscription not ready for invoice webhook"
-            )));
+            return Err(SubscriptionError::WebhookRetry(
+                "subscription not ready for invoice webhook",
+            ));
         };
 
         if BillingMode::from_str(&subscription.billing_mode) != Some(BillingMode::Recurring) {
@@ -1947,9 +1950,9 @@ where
                 subscription_id = %context.subscription_id,
                 "subscriptions: invoice payment failed without local subscription"
             );
-            return Err(SubscriptionError::Internal(anyhow!(
-                "subscription not ready for invoice webhook"
-            )));
+            return Err(SubscriptionError::WebhookRetry(
+                "subscription not ready for invoice webhook",
+            ));
         };
 
         if BillingMode::from_str(&subscription.billing_mode) != Some(BillingMode::Recurring) {
