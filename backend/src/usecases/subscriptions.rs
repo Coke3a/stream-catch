@@ -20,7 +20,9 @@ use crates::{
             subscriptions::{CurrentSubscriptionDto, PlanDto},
         },
     },
-    payments::stripe_client::{StripeClient, StripeEvent, StripeSubscription},
+    payments::stripe_client::{
+        StripeCheckoutSession, StripeClient, StripeEvent, StripeSubscription,
+    },
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -112,6 +114,7 @@ struct InvoiceContext {
     customer_id: Option<String>,
     status: Option<String>,
     payment_intent_id: Option<String>,
+    currency: Option<String>,
     period_start: Option<DateTime<Utc>>,
     period_end: Option<DateTime<Utc>>,
     amount_due: Option<i64>,
@@ -825,6 +828,11 @@ where
     ) -> UseCaseResult<()> {
         let (starts_at, ends_at) =
             Self::one_time_period_from_metadata(metadata, plan.duration_days)?;
+        let currency = session.currency.clone().unwrap_or_else(|| "thb".to_string());
+        let amount_minor = session
+            .amount_total
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(plan.price_minor);
 
         let provider_session_ref = session.id.clone().unwrap_or_default();
         let provider_payment_id = session.payment_intent.clone();
@@ -901,7 +909,13 @@ where
         };
 
         let invoice_id = self
-            .ensure_invoice_for_subscription(&subscription, starts_at, ends_at, plan.price_minor)
+            .ensure_invoice_for_subscription(
+                &subscription,
+                starts_at,
+                ends_at,
+                amount_minor,
+                currency.clone(),
+            )
             .await?;
 
         if let Some(payment_intent_id) = provider_payment_id.as_deref() {
@@ -921,10 +935,6 @@ where
                 })?;
 
             if !payment_exists {
-                let amount_minor = session
-                    .amount_total
-                    .and_then(|value| i32::try_from(value).ok())
-                    .unwrap_or(plan.price_minor);
                 self.payment_repo
                     .record_payment(crates::domain::entities::payments::NewPaymentEntity {
                         invoice_id,
@@ -933,6 +943,7 @@ where
                         method_type: payment_method.to_string(),
                         payment_method_id: None,
                         amount_minor,
+                        currency: currency.clone(),
                         status: PaymentStatus::Processing.to_string(),
                         provider_payment_id: provider_payment_id.clone(),
                         provider_session_ref: Some(provider_session_ref),
@@ -1072,6 +1083,11 @@ where
             .ok_or_else(|| {
                 SubscriptionError::InvalidWebhook("period end missing on subscription".to_string())
             })?;
+        let currency = session.currency.clone().unwrap_or_else(|| "thb".to_string());
+        let amount_minor = session
+            .amount_total
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(plan.price_minor);
 
         let existing_subscription = self
             .subscription_repo
@@ -1132,7 +1148,13 @@ where
         };
 
         let invoice_id = self
-            .ensure_invoice_for_subscription(&subscription, starts_at, ends_at, plan.price_minor)
+            .ensure_invoice_for_subscription(
+                &subscription,
+                starts_at,
+                ends_at,
+                amount_minor,
+                currency,
+            )
             .await?;
 
         if Self::checkout_paid(session.payment_status.as_deref()) {
@@ -1321,7 +1343,7 @@ where
         &self,
         event: &StripeEvent,
     ) -> UseCaseResult<()> {
-        let (payment_intent_id, amount_minor, payment_method) =
+        let (payment_intent_id, amount_minor, currency, payment_method) =
             Self::parse_payment_intent_event(event)?;
 
         info!(
@@ -1353,7 +1375,7 @@ where
             return Ok(());
         };
 
-        if BillingMode::from_str(&subscription.billing_mode) != BillingMode::OneTime {
+        if BillingMode::from_str(&subscription.billing_mode) != Some(BillingMode::OneTime) {
             info!(
                 stripe_event_id = ?event.id,
                 payment_intent_id = %payment_intent_id,
@@ -1378,6 +1400,8 @@ where
                 );
                 SubscriptionError::Internal(err)
             })?;
+
+        let currency = currency.unwrap_or_else(|| "thb".to_string());
 
         let plan_price_minor = match amount_minor {
             Some(value) => value,
@@ -1405,6 +1429,7 @@ where
                 subscription.starts_at,
                 subscription.ends_at,
                 plan_price_minor,
+                currency.clone(),
             )
             .await?;
 
@@ -1461,6 +1486,7 @@ where
                     method_type: payment_method.to_string(),
                     payment_method_id: None,
                     amount_minor,
+                    currency: currency.clone(),
                     status: PaymentStatus::Succeeded.to_string(),
                     provider_payment_id: Some(payment_intent_id.clone()),
                     provider_session_ref: None,
@@ -1487,7 +1513,7 @@ where
         payment_status: PaymentStatus,
         invoice_status: &'static str,
     ) -> UseCaseResult<()> {
-        let (payment_intent_id, amount_minor, payment_method) =
+        let (payment_intent_id, amount_minor, currency, payment_method) =
             Self::parse_payment_intent_event(event)?;
 
         error!(
@@ -1519,7 +1545,7 @@ where
             return Ok(());
         };
 
-        if BillingMode::from_str(&subscription.billing_mode) != BillingMode::OneTime {
+        if BillingMode::from_str(&subscription.billing_mode) != Some(BillingMode::OneTime) {
             info!(
                 stripe_event_id = ?event.id,
                 payment_intent_id = %payment_intent_id,
@@ -1544,6 +1570,8 @@ where
                 );
                 SubscriptionError::Internal(err)
             })?;
+
+        let currency = currency.unwrap_or_else(|| "thb".to_string());
 
         let plan_price_minor = match amount_minor {
             Some(value) => value,
@@ -1571,6 +1599,7 @@ where
                 subscription.starts_at,
                 subscription.ends_at,
                 plan_price_minor,
+                currency.clone(),
             )
             .await?;
 
@@ -1624,6 +1653,7 @@ where
                     method_type: payment_method.to_string(),
                     payment_method_id: None,
                     amount_minor,
+                    currency: currency.clone(),
                     status: payment_status.to_string(),
                     provider_payment_id: Some(payment_intent_id.clone()),
                     provider_session_ref: None,
@@ -1723,15 +1753,17 @@ where
             })?;
 
         let Some(subscription) = subscription else {
-            info!(
+            warn!(
                 stripe_event_id = ?event.id,
                 subscription_id = %context.subscription_id,
                 "subscriptions: invoice payment succeeded without local subscription"
             );
-            return Ok(());
+            return Err(SubscriptionError::Internal(anyhow!(
+                "subscription not ready for invoice webhook"
+            )));
         };
 
-        if BillingMode::from_str(&subscription.billing_mode) != BillingMode::Recurring {
+        if BillingMode::from_str(&subscription.billing_mode) != Some(BillingMode::Recurring) {
             info!(
                 stripe_event_id = ?event.id,
                 subscription_id = %context.subscription_id,
@@ -1763,6 +1795,8 @@ where
                 SubscriptionError::Internal(err)
             })?;
 
+        let currency = context.currency.clone().unwrap_or_else(|| "thb".to_string());
+
         let plan_price_minor = match context.amount_minor() {
             Some(value) => value,
             None => {
@@ -1784,7 +1818,13 @@ where
         };
 
         let invoice_id = self
-            .ensure_invoice_for_subscription(&subscription, period.0, period.1, plan_price_minor)
+            .ensure_invoice_for_subscription(
+                &subscription,
+                period.0,
+                period.1,
+                plan_price_minor,
+                currency.clone(),
+            )
             .await?;
 
         self.invoice_repo
@@ -1800,15 +1840,20 @@ where
                 SubscriptionError::Internal(err)
             })?;
 
-        if let Some(payment_intent_id) = context.payment_intent_id.as_deref() {
+        let payment_reference = context
+            .payment_intent_id
+            .clone()
+            .or_else(|| context.invoice_id.clone());
+
+        if let Some(provider_payment_id) = payment_reference.as_deref() {
             let payment_exists = self
                 .payment_repo
-                .exists_by_provider_payment_id(payment_intent_id)
+                .exists_by_provider_payment_id(provider_payment_id)
                 .await
                 .map_err(|err| {
                     error!(
                         stripe_event_id = ?event.id,
-                        payment_intent_id = %payment_intent_id,
+                        provider_payment_id = %provider_payment_id,
                         db_error = ?err,
                         "subscriptions: failed to check payment existence from invoice webhook"
                     );
@@ -1818,14 +1863,14 @@ where
             if payment_exists {
                 self.payment_repo
                     .update_status_by_provider_payment_id(
-                        payment_intent_id,
+                        provider_payment_id,
                         PaymentStatus::Succeeded,
                     )
                     .await
                     .map_err(|err| {
                         error!(
                             stripe_event_id = ?event.id,
-                            payment_intent_id = %payment_intent_id,
+                            provider_payment_id = %provider_payment_id,
                             db_error = ?err,
                             "subscriptions: failed to update payment from invoice webhook"
                         );
@@ -1841,8 +1886,9 @@ where
                         method_type: PaymentMethod::Card.to_string(),
                         payment_method_id: None,
                         amount_minor,
+                        currency: currency.clone(),
                         status: PaymentStatus::Succeeded.to_string(),
-                        provider_payment_id: Some(payment_intent_id.to_string()),
+                        provider_payment_id: Some(provider_payment_id.to_string()),
                         provider_session_ref: None,
                         error: None,
                     })
@@ -1850,13 +1896,19 @@ where
                     .map_err(|err| {
                         error!(
                             stripe_event_id = ?event.id,
-                            payment_intent_id = %payment_intent_id,
+                            provider_payment_id = %provider_payment_id,
                             db_error = ?err,
                             "subscriptions: failed to record payment from invoice webhook"
                         );
                         SubscriptionError::Internal(err)
                     })?;
             }
+        } else {
+            warn!(
+                stripe_event_id = ?event.id,
+                subscription_id = %context.subscription_id,
+                "subscriptions: invoice webhook missing payment reference"
+            );
         }
 
         Ok(())
@@ -1890,15 +1942,17 @@ where
             })?;
 
         let Some(subscription) = subscription else {
-            info!(
+            warn!(
                 stripe_event_id = ?event.id,
                 subscription_id = %context.subscription_id,
                 "subscriptions: invoice payment failed without local subscription"
             );
-            return Ok(());
+            return Err(SubscriptionError::Internal(anyhow!(
+                "subscription not ready for invoice webhook"
+            )));
         };
 
-        if BillingMode::from_str(&subscription.billing_mode) != BillingMode::Recurring {
+        if BillingMode::from_str(&subscription.billing_mode) != Some(BillingMode::Recurring) {
             info!(
                 stripe_event_id = ?event.id,
                 subscription_id = %context.subscription_id,
@@ -1928,6 +1982,8 @@ where
                 SubscriptionError::Internal(err)
             })?;
 
+        let currency = context.currency.clone().unwrap_or_else(|| "thb".to_string());
+
         let plan_price_minor = match context.amount_minor() {
             Some(value) => value,
             None => {
@@ -1949,7 +2005,13 @@ where
         };
 
         let invoice_id = self
-            .ensure_invoice_for_subscription(&subscription, period.0, period.1, plan_price_minor)
+            .ensure_invoice_for_subscription(
+                &subscription,
+                period.0,
+                period.1,
+                plan_price_minor,
+                currency.clone(),
+            )
             .await?;
 
         self.invoice_repo
@@ -1965,15 +2027,20 @@ where
                 SubscriptionError::Internal(err)
             })?;
 
-        if let Some(payment_intent_id) = context.payment_intent_id.as_deref() {
+        let payment_reference = context
+            .payment_intent_id
+            .clone()
+            .or_else(|| context.invoice_id.clone());
+
+        if let Some(provider_payment_id) = payment_reference.as_deref() {
             let payment_exists = self
                 .payment_repo
-                .exists_by_provider_payment_id(payment_intent_id)
+                .exists_by_provider_payment_id(provider_payment_id)
                 .await
                 .map_err(|err| {
                     error!(
                         stripe_event_id = ?event.id,
-                        payment_intent_id = %payment_intent_id,
+                        provider_payment_id = %provider_payment_id,
                         db_error = ?err,
                         "subscriptions: failed to check payment existence from invoice webhook"
                     );
@@ -1983,14 +2050,14 @@ where
             if payment_exists {
                 self.payment_repo
                     .update_status_by_provider_payment_id(
-                        payment_intent_id,
+                        provider_payment_id,
                         PaymentStatus::Failed,
                     )
                     .await
                     .map_err(|err| {
                         error!(
                             stripe_event_id = ?event.id,
-                            payment_intent_id = %payment_intent_id,
+                            provider_payment_id = %provider_payment_id,
                             db_error = ?err,
                             "subscriptions: failed to update payment from invoice webhook"
                         );
@@ -2006,8 +2073,9 @@ where
                         method_type: PaymentMethod::Card.to_string(),
                         payment_method_id: None,
                         amount_minor,
+                        currency: currency.clone(),
                         status: PaymentStatus::Failed.to_string(),
-                        provider_payment_id: Some(payment_intent_id.to_string()),
+                        provider_payment_id: Some(provider_payment_id.to_string()),
                         provider_session_ref: None,
                         error: None,
                     })
@@ -2015,13 +2083,19 @@ where
                     .map_err(|err| {
                         error!(
                             stripe_event_id = ?event.id,
-                            payment_intent_id = %payment_intent_id,
+                            provider_payment_id = %provider_payment_id,
                             db_error = ?err,
                             "subscriptions: failed to record payment from invoice webhook"
                         );
                         SubscriptionError::Internal(err)
                     })?;
             }
+        } else {
+            warn!(
+                stripe_event_id = ?event.id,
+                subscription_id = %context.subscription_id,
+                "subscriptions: invoice webhook missing payment reference"
+            );
         }
 
         Ok(())
@@ -2029,12 +2103,13 @@ where
 
     fn parse_payment_intent_event(
         event: &StripeEvent,
-    ) -> UseCaseResult<(String, Option<i32>, PaymentMethod)> {
+    ) -> UseCaseResult<(String, Option<i32>, Option<String>, PaymentMethod)> {
         #[derive(Deserialize)]
         struct PaymentIntentObject {
             id: Option<String>,
             amount: Option<i64>,
             amount_received: Option<i64>,
+            currency: Option<String>,
             payment_method_types: Option<Vec<String>>,
         }
 
@@ -2076,7 +2151,7 @@ where
             })
             .unwrap_or(PaymentMethod::Card);
 
-        Ok((payment_intent_id, amount_minor, payment_method))
+        Ok((payment_intent_id, amount_minor, payment_intent.currency, payment_method))
     }
 
     fn parse_invoice_context(event: &StripeEvent) -> UseCaseResult<InvoiceContext> {
@@ -2090,6 +2165,7 @@ where
             period_end: Option<i64>,
             amount_due: Option<i64>,
             amount_paid: Option<i64>,
+            currency: Option<String>,
             payment_intent: Option<String>,
             parent: Option<InvoiceParent>,
             lines: Option<InvoiceLines>,
@@ -2114,6 +2190,7 @@ where
         #[derive(Deserialize)]
         struct InvoiceLine {
             period: Option<InvoiceLinePeriod>,
+            currency: Option<String>,
             parent: Option<InvoiceLineParent>,
         }
 
@@ -2197,6 +2274,21 @@ where
             })
         });
 
+        let line_currency = invoice.lines.as_ref().and_then(|lines| {
+            lines.data.iter().find_map(|line| {
+                if let Some(parent) = line.parent.as_ref() {
+                    if let Some(details) = parent.subscription_item_details.as_ref() {
+                        if let Some(line_subscription_id) = details.subscription.as_ref() {
+                            if line_subscription_id != &subscription_id {
+                                return None;
+                            }
+                        }
+                    }
+                }
+                line.currency.clone()
+            })
+        });
+
         let invoice_period = line_period.or_else(|| {
             invoice
                 .period_start
@@ -2210,6 +2302,7 @@ where
             customer_id: invoice.customer,
             status: invoice.status,
             payment_intent_id: invoice.payment_intent,
+            currency: invoice.currency.or(line_currency),
             period_start: invoice_period.map(|value| value.0),
             period_end: invoice_period.map(|value| value.1),
             amount_due: invoice.amount_due,
@@ -2271,6 +2364,7 @@ where
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
         amount_minor: i32,
+        currency: String,
     ) -> UseCaseResult<Uuid> {
         let existing = self
             .invoice_repo
@@ -2296,6 +2390,7 @@ where
                 subscription_id: Some(subscription.id),
                 plan_id: subscription.plan_id,
                 amount_minor,
+                currency,
                 period_start,
                 period_end,
                 due_at: period_start,
