@@ -877,7 +877,8 @@ where
                         SubscriptionError::Internal(err)
                     })?;
 
-                self.invoice_repo
+                let invoice_id = self
+                    .invoice_repo
                     .create_invoice(crates::domain::entities::invoices::InsertInvoiceEntity {
                         user_id,
                         subscription_id: Some(local_subscription_id),
@@ -900,6 +901,51 @@ where
                         );
                         SubscriptionError::Internal(err)
                     })?;
+
+                if matches!(
+                    session.payment_status.as_deref(),
+                    Some("paid") | Some("no_payment_required")
+                ) {
+                    info!(
+                        %user_id,
+                        %plan_id,
+                        %subscription_id,
+                        payment_status = ?session.payment_status,
+                        "subscriptions: checkout session paid; activating subscription"
+                    );
+
+                    self.subscription_repo
+                        .update_status_by_provider_subscription_id(
+                            &subscription_id,
+                            SubscriptionStatus::Active,
+                        )
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                %user_id,
+                                %plan_id,
+                                %subscription_id,
+                                db_error = ?err,
+                                "subscriptions: failed to activate subscription after paid checkout"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+
+                    self.invoice_repo
+                        .mark_invoice_paid(invoice_id)
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                %user_id,
+                                %plan_id,
+                                %subscription_id,
+                                invoice_id = %invoice_id,
+                                db_error = ?err,
+                                "subscriptions: failed to mark invoice paid after paid checkout"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+                }
 
                 info!(
                     %user_id,
@@ -993,6 +1039,76 @@ where
                         %plan_id,
                         "subscriptions: missing payment intent for one-time checkout"
                     );
+                }
+
+                if matches!(
+                    session.payment_status.as_deref(),
+                    Some("paid") | Some("no_payment_required")
+                ) {
+                    info!(
+                        %user_id,
+                        %plan_id,
+                        payment_status = ?session.payment_status,
+                        "subscriptions: checkout session paid; activating one-time subscription"
+                    );
+
+                    if let Some(provider_reference) = provider_reference.as_deref() {
+                        self.subscription_repo
+                            .update_status_by_provider_subscription_id(
+                                provider_reference,
+                                SubscriptionStatus::Active,
+                            )
+                            .await
+                            .map_err(|err| {
+                                error!(
+                                    %user_id,
+                                    %plan_id,
+                                    provider_reference,
+                                    db_error = ?err,
+                                    "subscriptions: failed to activate one-time subscription after paid checkout"
+                                );
+                                SubscriptionError::Internal(err)
+                            })?;
+                    } else {
+                        warn!(
+                            %user_id,
+                            %plan_id,
+                            "subscriptions: missing provider reference for paid checkout session"
+                        );
+                    }
+
+                    self.invoice_repo
+                        .mark_invoice_paid(invoice_id)
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                %user_id,
+                                %plan_id,
+                                invoice_id = %invoice_id,
+                                db_error = ?err,
+                                "subscriptions: failed to mark invoice paid after paid checkout"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+
+                    if let Some(payment_intent_id) = provider_payment_id.as_deref() {
+                        self.payment_repo
+                            .update_status_by_provider_payment_id(
+                                payment_intent_id,
+                                PaymentStatus::Succeeded,
+                            )
+                            .await
+                            .map_err(|err| {
+                                error!(
+                                    %user_id,
+                                    %plan_id,
+                                    payment_intent_id = %payment_intent_id,
+                                    db_error = ?err,
+                                    "subscriptions: failed to update payment after paid checkout"
+                                );
+                                SubscriptionError::Internal(err)
+                            })?;
+                    }
                 }
 
                 info!(

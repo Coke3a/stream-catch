@@ -53,6 +53,7 @@ pub struct StripeCheckoutSession {
     pub subscription: Option<String>,
     pub customer: Option<String>,
     pub payment_intent: Option<String>,
+    pub payment_status: Option<String>,
     pub amount_total: Option<i64>,
     pub metadata: Option<HashMap<String, String>>,
 }
