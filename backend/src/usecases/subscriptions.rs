@@ -1019,7 +1019,7 @@ where
                             payment_method_id: None,
                             amount_minor,
                             status: PaymentStatus::Processing.to_string(),
-                            provider_payment_id,
+                            provider_payment_id: provider_payment_id.clone(),
                             provider_session_ref: Some(provider_session_ref),
                             error: None,
                         })
