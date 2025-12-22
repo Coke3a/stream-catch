@@ -29,6 +29,19 @@ pub trait SubscriptionRepository {
         status: SubscriptionStatus,
     ) -> Result<()>;
 
+    async fn find_by_provider_subscription_id(
+        &self,
+        provider_subscription_id: &str,
+    ) -> Result<Option<SubscriptionEntity>>;
+
+    async fn update_status_and_period_by_provider_subscription_id(
+        &self,
+        provider_subscription_id: &str,
+        status: SubscriptionStatus,
+        starts_at: DateTime<Utc>,
+        ends_at: DateTime<Utc>,
+    ) -> Result<()>;
+
     async fn create_or_update_subscription_after_checkout(
         &self,
         user_id: Uuid,

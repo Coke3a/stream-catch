@@ -60,7 +60,7 @@ CREATE TABLE "subscriptions" (
   "default_payment_method_id" uuid,
   "cancel_at_period_end" BOOLEAN NOT NULL DEFAULT false,
   "canceled_at" timestamptz,
-  "status" TEXT NOT NULL CHECK ("status" IN ('active','past_due','canceled','expired')),
+  "status" TEXT NOT NULL CHECK ("status" IN ('active','pending','past_due','canceled','expired')),
   "created_at" timestamptz NOT NULL DEFAULT now(),
   CHECK ("starts_at" < "ends_at")
 );

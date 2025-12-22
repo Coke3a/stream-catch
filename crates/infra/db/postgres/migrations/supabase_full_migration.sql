@@ -114,7 +114,7 @@ CREATE TABLE "subscriptions" (
   "cancel_at_period_end" BOOLEAN NOT NULL DEFAULT false,
   "canceled_at" timestamptz,
   "provider_subscription_id" TEXT,
-  "status" TEXT NOT NULL CHECK ("status" IN ('active','past_due','canceled','expired')),
+  "status" TEXT NOT NULL CHECK ("status" IN ('active','pending','past_due','canceled','expired')),
   "created_at" timestamptz NOT NULL DEFAULT now(),
   CHECK ("starts_at" < "ends_at")
 );

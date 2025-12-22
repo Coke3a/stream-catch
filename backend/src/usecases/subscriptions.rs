@@ -479,6 +479,9 @@ where
             "checkout.session.completed" => {
                 self.handle_checkout_completed(&event).await?;
             }
+            "checkout.session.expired" => {
+                self.handle_checkout_expired(&event).await?;
+            }
             "customer.subscription.deleted" => {
                 error!(
                     stripe_event_id = ?event.id,
@@ -505,6 +508,25 @@ where
             "invoice.payment_succeeded" => {
                 self.handle_invoice_status_change(&event, SubscriptionStatus::Active)
                     .await?;
+            }
+            "payment_intent.succeeded" => {
+                self.handle_payment_intent_succeeded(&event).await?;
+            }
+            "payment_intent.payment_failed" => {
+                self.handle_payment_intent_failed(
+                    &event,
+                    PaymentStatus::Failed,
+                    "failed",
+                )
+                .await?;
+            }
+            "payment_intent.canceled" => {
+                self.handle_payment_intent_failed(
+                    &event,
+                    PaymentStatus::Canceled,
+                    "void",
+                )
+                .await?;
             }
             _ => {
                 error!(
@@ -771,6 +793,13 @@ where
 
         let provider_session_ref = session.id.clone().unwrap_or_default();
         let provider_payment_id = session.payment_intent.clone();
+        let provider_reference = provider_payment_id.clone().or_else(|| {
+            if provider_session_ref.is_empty() {
+                None
+            } else {
+                Some(provider_session_ref.clone())
+            }
+        });
 
         match session.mode.as_deref() {
             Some("subscription") => {
@@ -825,14 +854,15 @@ where
                     "subscriptions: stripe subscription retrieved"
                 );
 
-                self.subscription_repo
+                let local_subscription_id = self
+                    .subscription_repo
                     .create_or_update_subscription_after_checkout(
                         user_id,
                         plan_id,
                         BillingMode::Recurring,
                         starts_at,
                         ends_at,
-                        SubscriptionStatus::Active,
+                        SubscriptionStatus::Pending,
                         Some(subscription_id.clone()),
                     )
                     .await
@@ -847,18 +877,17 @@ where
                         SubscriptionError::Internal(err)
                     })?;
 
-                let invoice_id = self
-                    .invoice_repo
+                self.invoice_repo
                     .create_invoice(crates::domain::entities::invoices::InsertInvoiceEntity {
                         user_id,
-                        subscription_id: None,
+                        subscription_id: Some(local_subscription_id),
                         plan_id,
                         amount_minor: plan.price_minor,
                         period_start: starts_at,
                         period_end: ends_at,
                         due_at: starts_at,
-                        status: "paid".to_string(),
-                        paid_at: Some(Utc::now()),
+                        status: "pending".to_string(),
+                        paid_at: None,
                     })
                     .await
                     .map_err(|err| {
@@ -868,31 +897,6 @@ where
                             %subscription_id,
                             db_error = ?err,
                             "subscriptions: failed to create invoice after subscription checkout"
-                        );
-                        SubscriptionError::Internal(err)
-                    })?;
-
-                self.payment_repo
-                    .record_payment(crates::domain::entities::payments::NewPaymentEntity {
-                        invoice_id,
-                        user_id,
-                        provider: "stripe".to_string(),
-                        method_type: payment_method.to_string(),
-                        payment_method_id: None,
-                        amount_minor: plan.price_minor,
-                        status: PaymentStatus::Succeeded.to_string(),
-                        provider_payment_id,
-                        provider_session_ref: Some(provider_session_ref),
-                        error: None,
-                    })
-                    .await
-                    .map_err(|err| {
-                        error!(
-                            %user_id,
-                            %plan_id,
-                            %subscription_id,
-                            db_error = ?err,
-                            "subscriptions: failed to record payment for subscription checkout"
                         );
                         SubscriptionError::Internal(err)
                     })?;
@@ -908,15 +912,16 @@ where
                 let (starts_at, ends_at) =
                     Self::one_time_period_from_metadata(&metadata, plan.duration_days)?;
 
-                self.subscription_repo
+                let local_subscription_id = self
+                    .subscription_repo
                     .create_or_update_subscription_after_checkout(
                         user_id,
                         plan_id,
                         BillingMode::OneTime,
                         starts_at,
                         ends_at,
-                        SubscriptionStatus::Active,
-                        None,
+                        SubscriptionStatus::Pending,
+                        provider_reference.clone(),
                     )
                     .await
                     .map_err(|err| {
@@ -933,14 +938,14 @@ where
                     .invoice_repo
                     .create_invoice(crates::domain::entities::invoices::InsertInvoiceEntity {
                         user_id,
-                        subscription_id: None,
+                        subscription_id: Some(local_subscription_id),
                         plan_id,
                         amount_minor: plan.price_minor,
                         period_start: starts_at,
                         period_end: ends_at,
                         due_at: starts_at,
-                        status: "paid".to_string(),
-                        paid_at: Some(Utc::now()),
+                        status: "pending".to_string(),
+                        paid_at: None,
                     })
                     .await
                     .map_err(|err| {
@@ -958,29 +963,37 @@ where
                     .and_then(|v| i32::try_from(v).ok())
                     .unwrap_or(plan.price_minor);
 
-                self.payment_repo
-                    .record_payment(crates::domain::entities::payments::NewPaymentEntity {
-                        invoice_id,
-                        user_id,
-                        provider: "stripe".to_string(),
-                        method_type: payment_method.to_string(),
-                        payment_method_id: None,
-                        amount_minor,
-                        status: PaymentStatus::Succeeded.to_string(),
-                        provider_payment_id,
-                        provider_session_ref: Some(provider_session_ref),
-                        error: None,
-                    })
-                    .await
-                    .map_err(|err| {
-                        error!(
-                            %user_id,
-                            %plan_id,
-                            db_error = ?err,
-                            "subscriptions: failed to record payment for one-time checkout"
-                        );
-                        SubscriptionError::Internal(err)
-                    })?;
+                if provider_payment_id.is_some() {
+                    self.payment_repo
+                        .record_payment(crates::domain::entities::payments::NewPaymentEntity {
+                            invoice_id,
+                            user_id,
+                            provider: "stripe".to_string(),
+                            method_type: payment_method.to_string(),
+                            payment_method_id: None,
+                            amount_minor,
+                            status: PaymentStatus::Processing.to_string(),
+                            provider_payment_id,
+                            provider_session_ref: Some(provider_session_ref),
+                            error: None,
+                        })
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                %user_id,
+                                %plan_id,
+                                db_error = ?err,
+                                "subscriptions: failed to record payment for one-time checkout"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+                } else {
+                    warn!(
+                        %user_id,
+                        %plan_id,
+                        "subscriptions: missing payment intent for one-time checkout"
+                    );
+                }
 
                 info!(
                     %user_id,
@@ -1002,6 +1015,369 @@ where
                 return Err(SubscriptionError::InvalidWebhook(
                     "unknown checkout session mode".to_string(),
                 ));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_checkout_expired(&self, event: &StripeEvent) -> UseCaseResult<()> {
+        let session = StripeClient::extract_checkout_session(event).ok_or_else(|| {
+            let err =
+                SubscriptionError::InvalidWebhook("missing checkout session".to_string());
+            error!(
+                stripe_event_id = ?event.id,
+                status = err.status_code().as_u16(),
+                "subscriptions: expired checkout missing session"
+            );
+            err
+        })?;
+
+        let provider_reference = session
+            .payment_intent
+            .clone()
+            .or(session.id.clone())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                let err =
+                    SubscriptionError::InvalidWebhook("missing payment reference".to_string());
+                error!(
+                    stripe_event_id = ?event.id,
+                    status = err.status_code().as_u16(),
+                    "subscriptions: expired checkout missing payment reference"
+                );
+                err
+            })?;
+
+        info!(
+            stripe_event_id = ?event.id,
+            provider_reference = %provider_reference,
+            "subscriptions: checkout expired; expiring pending subscription if present"
+        );
+
+        let subscription = self
+            .subscription_repo
+            .find_by_provider_subscription_id(&provider_reference)
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    provider_reference = %provider_reference,
+                    db_error = ?err,
+                    "subscriptions: failed to load subscription for checkout expiration"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        let Some(subscription) = subscription else {
+            info!(
+                stripe_event_id = ?event.id,
+                provider_reference = %provider_reference,
+                "subscriptions: no subscription found for checkout expiration"
+            );
+            return Ok(());
+        };
+
+        if SubscriptionStatus::from_str(&subscription.status) != SubscriptionStatus::Pending {
+            info!(
+                stripe_event_id = ?event.id,
+                provider_reference = %provider_reference,
+                status = %subscription.status,
+                "subscriptions: checkout expired for non-pending subscription"
+            );
+            return Ok(());
+        }
+
+        self.subscription_repo
+            .update_status_by_provider_subscription_id(
+                &provider_reference,
+                SubscriptionStatus::Expired,
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    provider_reference = %provider_reference,
+                    db_error = ?err,
+                    "subscriptions: failed to expire subscription after checkout expiration"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        if let Some(invoice) = self
+            .invoice_repo
+            .find_by_subscription_and_period_start(subscription.id, subscription.starts_at)
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    provider_reference = %provider_reference,
+                    db_error = ?err,
+                    "subscriptions: failed to load invoice for checkout expiration"
+                );
+                SubscriptionError::Internal(err)
+            })?
+        {
+            self.invoice_repo
+                .update_status_by_id(invoice.id, "void")
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        invoice_id = %invoice.id,
+                        db_error = ?err,
+                        "subscriptions: failed to void invoice after checkout expiration"
+                    );
+                    SubscriptionError::Internal(err)
+                })?;
+        }
+
+        if let Some(payment_intent_id) = session.payment_intent.as_deref() {
+            self.payment_repo
+                .update_status_by_provider_payment_id(
+                    payment_intent_id,
+                    PaymentStatus::Canceled,
+                )
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        payment_intent_id = %payment_intent_id,
+                        db_error = ?err,
+                        "subscriptions: failed to cancel payment after checkout expiration"
+                    );
+                    SubscriptionError::Internal(err)
+                })?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_payment_intent_succeeded(
+        &self,
+        event: &StripeEvent,
+    ) -> UseCaseResult<()> {
+        #[derive(Deserialize)]
+        struct PaymentIntentObject {
+            id: Option<String>,
+        }
+
+        let payment_intent: PaymentIntentObject =
+            serde_json::from_value(event.data.object.clone()).map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    error = %err,
+                    status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
+                    "subscriptions: invalid payment_intent payload in webhook"
+                );
+                SubscriptionError::InvalidWebhook("invalid payment_intent payload".to_string())
+            })?;
+
+        let payment_intent_id = payment_intent.id.ok_or_else(|| {
+            let err =
+                SubscriptionError::InvalidWebhook("missing payment_intent id".to_string());
+            error!(
+                stripe_event_id = ?event.id,
+                status = err.status_code().as_u16(),
+                "subscriptions: payment_intent id missing in webhook"
+            );
+            err
+        })?;
+
+        info!(
+            stripe_event_id = ?event.id,
+            payment_intent_id = %payment_intent_id,
+            "subscriptions: payment_intent succeeded; activating subscription"
+        );
+
+        self.subscription_repo
+            .update_status_by_provider_subscription_id(
+                &payment_intent_id,
+                SubscriptionStatus::Active,
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    payment_intent_id = %payment_intent_id,
+                    db_error = ?err,
+                    "subscriptions: failed to activate subscription after payment_intent"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        self.payment_repo
+            .update_status_by_provider_payment_id(
+                &payment_intent_id,
+                PaymentStatus::Succeeded,
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    payment_intent_id = %payment_intent_id,
+                    db_error = ?err,
+                    "subscriptions: failed to update payment after payment_intent"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        let subscription = self
+            .subscription_repo
+            .find_by_provider_subscription_id(&payment_intent_id)
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    payment_intent_id = %payment_intent_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load subscription after payment_intent"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        if let Some(subscription) = subscription {
+            if let Some(invoice) = self
+                .invoice_repo
+                .find_by_subscription_and_period_start(subscription.id, subscription.starts_at)
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        subscription_id = %subscription.id,
+                        db_error = ?err,
+                        "subscriptions: failed to load invoice after payment_intent"
+                    );
+                    SubscriptionError::Internal(err)
+                })?
+            {
+                self.invoice_repo
+                    .mark_invoice_paid(invoice.id)
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            stripe_event_id = ?event.id,
+                            invoice_id = %invoice.id,
+                            db_error = ?err,
+                            "subscriptions: failed to mark invoice paid after payment_intent"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_payment_intent_failed(
+        &self,
+        event: &StripeEvent,
+        payment_status: PaymentStatus,
+        invoice_status: &'static str,
+    ) -> UseCaseResult<()> {
+        #[derive(Deserialize)]
+        struct PaymentIntentObject {
+            id: Option<String>,
+        }
+
+        let payment_intent: PaymentIntentObject =
+            serde_json::from_value(event.data.object.clone()).map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    error = %err,
+                    status = SubscriptionError::InvalidWebhook("".into()).status_code().as_u16(),
+                    "subscriptions: invalid payment_intent payload in webhook"
+                );
+                SubscriptionError::InvalidWebhook("invalid payment_intent payload".to_string())
+            })?;
+
+        let payment_intent_id = payment_intent.id.ok_or_else(|| {
+            let err =
+                SubscriptionError::InvalidWebhook("missing payment_intent id".to_string());
+            error!(
+                stripe_event_id = ?event.id,
+                status = err.status_code().as_u16(),
+                "subscriptions: payment_intent id missing in webhook"
+            );
+            err
+        })?;
+
+        error!(
+            stripe_event_id = ?event.id,
+            payment_intent_id = %payment_intent_id,
+            "subscriptions: payment_intent failed; expiring subscription"
+        );
+
+        self.subscription_repo
+            .update_status_by_provider_subscription_id(
+                &payment_intent_id,
+                SubscriptionStatus::Expired,
+            )
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    payment_intent_id = %payment_intent_id,
+                    db_error = ?err,
+                    "subscriptions: failed to expire subscription after payment_intent failure"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        self.payment_repo
+            .update_status_by_provider_payment_id(&payment_intent_id, payment_status)
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    payment_intent_id = %payment_intent_id,
+                    db_error = ?err,
+                    "subscriptions: failed to update payment after payment_intent failure"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        let subscription = self
+            .subscription_repo
+            .find_by_provider_subscription_id(&payment_intent_id)
+            .await
+            .map_err(|err| {
+                error!(
+                    stripe_event_id = ?event.id,
+                    payment_intent_id = %payment_intent_id,
+                    db_error = ?err,
+                    "subscriptions: failed to load subscription after payment_intent failure"
+                );
+                SubscriptionError::Internal(err)
+            })?;
+
+        if let Some(subscription) = subscription {
+            if let Some(invoice) = self
+                .invoice_repo
+                .find_by_subscription_and_period_start(subscription.id, subscription.starts_at)
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        subscription_id = %subscription.id,
+                        db_error = ?err,
+                        "subscriptions: failed to load invoice after payment_intent failure"
+                    );
+                    SubscriptionError::Internal(err)
+                })?
+            {
+                self.invoice_repo
+                    .update_status_by_id(invoice.id, invoice_status)
+                    .await
+                    .map_err(|err| {
+                        error!(
+                            stripe_event_id = ?event.id,
+                            invoice_id = %invoice.id,
+                            db_error = ?err,
+                            "subscriptions: failed to update invoice after payment_intent failure"
+                        );
+                        SubscriptionError::Internal(err)
+                    })?;
             }
         }
 
@@ -1080,6 +1456,8 @@ where
             subscription: Option<String>,
             customer: Option<String>,
             status: Option<String>,
+            period_start: Option<i64>,
+            period_end: Option<i64>,
             amount_due: Option<i64>,
             amount_paid: Option<i64>,
             attempt_count: Option<u32>,
@@ -1108,7 +1486,14 @@ where
 
         #[derive(Deserialize)]
         struct InvoiceLine {
+            period: Option<InvoiceLinePeriod>,
             parent: Option<InvoiceLineParent>,
+        }
+
+        #[derive(Deserialize)]
+        struct InvoiceLinePeriod {
+            start: Option<i64>,
+            end: Option<i64>,
         }
 
         #[derive(Deserialize)]
@@ -1167,6 +1552,22 @@ where
                 err
             })?;
 
+        let invoice_period = invoice
+            .period_start
+            .and_then(Self::ts_to_datetime)
+            .zip(invoice.period_end.and_then(Self::ts_to_datetime))
+            .or_else(|| {
+                invoice.lines.as_ref().and_then(|lines| {
+                    lines.data.iter().find_map(|line| {
+                        let period = line.period.as_ref()?;
+                        let starts_at = period.start.and_then(Self::ts_to_datetime)?;
+                        let ends_at = period.end.and_then(Self::ts_to_datetime)?;
+                        Some((starts_at, ends_at))
+                    })
+                })
+            });
+        let mut resolved_period = invoice_period;
+
         if status == SubscriptionStatus::PastDue {
             error!(
                 stripe_event_id = ?event.id,
@@ -1193,18 +1594,199 @@ where
             );
         }
 
-        self.subscription_repo
-            .update_status_by_provider_subscription_id(&subscription_id, status)
+        if status == SubscriptionStatus::Active {
+            let (starts_at, ends_at) = match resolved_period {
+                Some(period) => period,
+                None => {
+                    info!(
+                        stripe_event_id = ?event.id,
+                        subscription_id = %subscription_id,
+                        "subscriptions: invoice missing period data; retrieving subscription from stripe"
+                    );
+                    let subscription = self
+                        .stripe_client
+                        .retrieve_subscription(&subscription_id)
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                stripe_event_id = ?event.id,
+                                subscription_id = %subscription_id,
+                                error = ?err,
+                                "subscriptions: failed to retrieve subscription for invoice period"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+
+                    let starts_at = subscription
+                        .period_start()
+                        .and_then(Self::ts_to_datetime)
+                        .ok_or_else(|| {
+                            SubscriptionError::InvalidWebhook(
+                                "subscription period start missing".to_string(),
+                            )
+                        })?;
+                    let ends_at = subscription
+                        .period_end()
+                        .and_then(Self::ts_to_datetime)
+                        .ok_or_else(|| {
+                            SubscriptionError::InvalidWebhook(
+                                "subscription period end missing".to_string(),
+                            )
+                        })?;
+
+                    let period = (starts_at, ends_at);
+                    resolved_period = Some(period);
+                    period
+                }
+            };
+
+            self.subscription_repo
+                .update_status_and_period_by_provider_subscription_id(
+                    &subscription_id,
+                    status,
+                    starts_at,
+                    ends_at,
+                )
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        subscription_id = %subscription_id,
+                        db_error = ?err,
+                        "subscriptions: failed to update subscription period from invoice webhook"
+                    );
+                    SubscriptionError::Internal(err)
+                })?;
+        } else {
+            self.subscription_repo
+                .update_status_by_provider_subscription_id(&subscription_id, status)
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        subscription_id = %subscription_id,
+                        db_error = ?err,
+                        "subscriptions: failed to update subscription status from invoice webhook"
+                    );
+                    SubscriptionError::Internal(err)
+                })?;
+        }
+
+        let subscription = self
+            .subscription_repo
+            .find_by_provider_subscription_id(&subscription_id)
             .await
             .map_err(|err| {
                 error!(
                     stripe_event_id = ?event.id,
                     subscription_id = %subscription_id,
                     db_error = ?err,
-                    "subscriptions: failed to update subscription status from invoice webhook"
+                    "subscriptions: failed to load subscription from invoice webhook"
                 );
                 SubscriptionError::Internal(err)
             })?;
+
+        if let (Some(subscription), Some((period_start, _))) = (subscription, resolved_period) {
+            let local_invoice = self
+                .invoice_repo
+                .find_by_subscription_and_period_start(subscription.id, period_start)
+                .await
+                .map_err(|err| {
+                    error!(
+                        stripe_event_id = ?event.id,
+                        subscription_id = %subscription.id,
+                        db_error = ?err,
+                        "subscriptions: failed to load invoice from invoice webhook"
+                    );
+                    SubscriptionError::Internal(err)
+                })?;
+
+            if let Some(local_invoice) = local_invoice {
+                if status == SubscriptionStatus::Active {
+                    self.invoice_repo
+                        .mark_invoice_paid(local_invoice.id)
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                stripe_event_id = ?event.id,
+                                invoice_id = %local_invoice.id,
+                                db_error = ?err,
+                                "subscriptions: failed to mark invoice paid from invoice webhook"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+                } else if status == SubscriptionStatus::PastDue {
+                    self.invoice_repo
+                        .update_status_by_id(local_invoice.id, "past_due")
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                stripe_event_id = ?event.id,
+                                invoice_id = %local_invoice.id,
+                                db_error = ?err,
+                                "subscriptions: failed to mark invoice past due from invoice webhook"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+                }
+
+                if let Some(payment_intent_id) = invoice.payment_intent.as_deref() {
+                    let payment_exists = self
+                        .payment_repo
+                        .exists_by_provider_payment_id(payment_intent_id)
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                stripe_event_id = ?event.id,
+                                payment_intent_id = %payment_intent_id,
+                                db_error = ?err,
+                                "subscriptions: failed to check payment existence from invoice webhook"
+                            );
+                            SubscriptionError::Internal(err)
+                        })?;
+
+                    if !payment_exists {
+                        let amount_minor = match status {
+                            SubscriptionStatus::Active => invoice.amount_paid.or(invoice.amount_due),
+                            SubscriptionStatus::PastDue => invoice.amount_due.or(invoice.amount_paid),
+                            _ => None,
+                        }
+                        .and_then(|value| i32::try_from(value).ok())
+                        .unwrap_or(local_invoice.amount_minor);
+
+                        let payment_status = match status {
+                            SubscriptionStatus::Active => PaymentStatus::Succeeded,
+                            SubscriptionStatus::PastDue => PaymentStatus::Failed,
+                            _ => PaymentStatus::Failed,
+                        };
+
+                        self.payment_repo
+                            .record_payment(crates::domain::entities::payments::NewPaymentEntity {
+                                invoice_id: local_invoice.id,
+                                user_id: subscription.user_id,
+                                provider: "stripe".to_string(),
+                                method_type: PaymentMethod::Card.to_string(),
+                                payment_method_id: None,
+                                amount_minor,
+                                status: payment_status.to_string(),
+                                provider_payment_id: Some(payment_intent_id.to_string()),
+                                provider_session_ref: None,
+                                error: None,
+                            })
+                            .await
+                            .map_err(|err| {
+                                error!(
+                                    stripe_event_id = ?event.id,
+                                    payment_intent_id = %payment_intent_id,
+                                    db_error = ?err,
+                                    "subscriptions: failed to record payment from invoice webhook"
+                                );
+                                SubscriptionError::Internal(err)
+                            })?;
+                    }
+                }
+            }
+        }
 
         Ok(())
     }

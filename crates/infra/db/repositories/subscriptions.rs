@@ -71,6 +71,45 @@ impl SubscriptionRepository for SubscriptionPostgres {
         Ok(())
     }
 
+    async fn find_by_provider_subscription_id(
+        &self,
+        provider_subscription_id: &str,
+    ) -> Result<Option<SubscriptionEntity>> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let subscription = subscriptions::table
+            .filter(subscriptions::provider_subscription_id.eq(provider_subscription_id))
+            .order(subscriptions::created_at.desc())
+            .first::<SubscriptionEntity>(&mut conn)
+            .optional()?;
+
+        Ok(subscription)
+    }
+
+    async fn update_status_and_period_by_provider_subscription_id(
+        &self,
+        provider_subscription_id: &str,
+        status: SubscriptionStatus,
+        starts_at: DateTime<Utc>,
+        ends_at: DateTime<Utc>,
+    ) -> Result<()> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+        let status_str = status.to_string();
+
+        update(
+            subscriptions::table
+                .filter(subscriptions::provider_subscription_id.eq(provider_subscription_id)),
+        )
+        .set((
+            subscriptions::status.eq(status_str),
+            subscriptions::starts_at.eq(starts_at),
+            subscriptions::ends_at.eq(ends_at),
+        ))
+        .execute(&mut conn)?;
+
+        Ok(())
+    }
+
     async fn find_current_active_non_free_subscription(
         &self,
         user_id: Uuid,
