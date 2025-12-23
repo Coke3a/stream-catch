@@ -106,6 +106,30 @@ impl NotificationProvider for DiscordWebhookProvider {
     }
 }
 
+pub(super) async fn send_discord_webhook(webhook_url: Url, content: String) -> Result<()> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .expect("reqwest client must build");
+    let content = truncate_for_discord(content);
+
+    let response = client
+        .post(webhook_url)
+        .json(&json!({ "content": content }))
+        .send()
+        .await
+        .map_err(sanitize_reqwest_error)?;
+
+    if response.status().is_success() {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "discord webhook returned non-success status: {}",
+        response.status()
+    ))
+}
+
 fn sanitize_reqwest_error(error: reqwest::Error) -> anyhow::Error {
     if error.is_timeout() {
         return anyhow!("discord webhook request timed out");

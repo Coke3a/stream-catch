@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use url::Url;
 
 pub fn init_observability(component: &str) -> Result<()> {
     let config = ObservabilityConfig::from_env(component);
@@ -72,4 +73,8 @@ pub fn init_observability(component: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub async fn send_discord_webhook(webhook_url: Url, content: String) -> Result<()> {
+    discord::send_discord_webhook(webhook_url, content).await
 }

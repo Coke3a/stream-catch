@@ -75,7 +75,7 @@ fn normalize_url_for_platform(platform: Platform, url: &Url) -> Result<(String, 
     match platform {
         Platform::TikTok => normalize_tiktok(url),
         Platform::Twitch => normalize_single_segment(url, "www.twitch.tv", UsernameRule::Strict),
-        Platform::Bigo => normalize_single_segment(url, "www.bigo.tv", UsernameRule::Strict),
+        Platform::Bigo => normalize_single_segment(url, "www.bigo.tv", UsernameRule::TikTok),
         Platform::Kick => normalize_single_segment(url, "kick.com", UsernameRule::Strict),
         Platform::SoopLive => {
             normalize_single_segment(url, "www.sooplive.com", UsernameRule::Strict)
@@ -133,23 +133,17 @@ fn validate_account_id(account_id: &str, rule: UsernameRule) -> Result<()> {
     if account_id.len() > MAX_LIVE_ACCOUNT_ID_LEN {
         bail!("Invalid URL: account id too long");
     }
-    if account_id.contains("..") {
-        bail!("Invalid URL: invalid account id");
-    }
 
     match rule {
         UsernameRule::Strict => {
             if !account_id
                 .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
             {
                 bail!("Invalid URL: invalid account id");
             }
         }
         UsernameRule::TikTok => {
-            if account_id.starts_with('.') || account_id.ends_with('.') {
-                bail!("Invalid URL: invalid account id");
-            }
             if !account_id
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
@@ -194,6 +188,52 @@ mod tests {
         assert_eq!(
             normalized.canonical_url,
             "https://www.sooplive.com/kiss2514"
+        );
+    }
+
+    #[test]
+    fn urls_with_dots_are_normalized() {
+        let normalized = normalize_live_account_url("https://www.bigo.tv/GGee_p45.").unwrap();
+        assert_eq!(normalized.platform, Platform::Bigo);
+        assert_eq!(normalized.account_id, "GGee_p45.");
+        assert_eq!(normalized.canonical_url, "https://www.bigo.tv/GGee_p45.");
+
+        let normalized = normalize_live_account_url("https://www.bigo.tv/farm.gethigh09").unwrap();
+        assert_eq!(normalized.account_id, "farm.gethigh09");
+        assert_eq!(normalized.canonical_url, "https://www.bigo.tv/farm.gethigh09");
+
+        let normalized = normalize_live_account_url("https://www.bigo.tv/fearmcza.9876543").unwrap();
+        assert_eq!(normalized.account_id, "fearmcza.9876543");
+        assert_eq!(
+            normalized.canonical_url,
+            "https://www.bigo.tv/fearmcza.9876543"
+        );
+
+        let normalized =
+            normalize_live_account_url("https://www.tiktok.com/@.pc...etm/live").unwrap();
+        assert_eq!(normalized.platform, Platform::TikTok);
+        assert_eq!(normalized.account_id, ".pc...etm");
+        assert_eq!(
+            normalized.canonical_url,
+            "https://www.tiktok.com/@.pc...etm/live"
+        );
+
+        let normalized = normalize_live_account_url("https://www.twitch.tv/stream.er").unwrap();
+        assert_eq!(normalized.platform, Platform::Twitch);
+        assert_eq!(normalized.account_id, "stream.er");
+        assert_eq!(normalized.canonical_url, "https://www.twitch.tv/stream.er");
+
+        let normalized = normalize_live_account_url("https://kick.com/stream.er").unwrap();
+        assert_eq!(normalized.platform, Platform::Kick);
+        assert_eq!(normalized.account_id, "stream.er");
+        assert_eq!(normalized.canonical_url, "https://kick.com/stream.er");
+
+        let normalized = normalize_live_account_url("https://www.sooplive.com/stream.er").unwrap();
+        assert_eq!(normalized.platform, Platform::SoopLive);
+        assert_eq!(normalized.account_id, "stream.er");
+        assert_eq!(
+            normalized.canonical_url,
+            "https://www.sooplive.com/stream.er"
         );
     }
 

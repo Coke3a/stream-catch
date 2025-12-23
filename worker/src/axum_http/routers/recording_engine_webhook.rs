@@ -13,7 +13,8 @@ use domain::value_objects::recording_engine_webhook::{
     RecordingEngineLiveStartWebhook,
     RecordingEngineTransmuxFinishWebhook,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
+use url::Url;
 use uuid::Uuid;
 
 use crate::usecases::recording_engine_webhook::RecordingEngineWebhookUseCase;
@@ -80,6 +81,32 @@ pub async fn error_webhook(
         payload = ?payload,
         "recording_engine_webhook: error received"
     );
+
+    if let Ok(raw_url) = std::env::var("DISCORD_RECORDING_ENGINE_ERROR_WEBHOOK_URL") {
+        let trimmed = raw_url.trim();
+        if !trimmed.is_empty() {
+            match Url::parse(trimmed) {
+                Ok(webhook_url) => {
+                    let content = recording_engine_alert_content(&payload);
+                    if let Err(err) =
+                        crates::observability::send_discord_webhook(webhook_url, content).await
+                    {
+                        warn!(
+                            error = %err,
+                            "recording_engine_webhook: failed to send recording engine alert"
+                        );
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        error = %err,
+                        "recording_engine_webhook: DISCORD_RECORDING_ENGINE_ERROR_WEBHOOK_URL is invalid"
+                    );
+                }
+            }
+        }
+    }
+
     match usecase.handle_error(payload).await {
         Ok(recording_id) => success_response(recording_id),
         Err(err) => map_error("error", err),
@@ -107,4 +134,21 @@ fn map_error(label: &str, err: anyhow::Error) -> Response {
         label
     );
     (status, message).into_response()
+}
+
+fn recording_engine_alert_content(payload: &RecordingEngineErrorWebhook) -> String {
+    let data = &payload.data;
+    let platform = data.platform.as_deref().unwrap_or("unknown");
+    let channel = data.channel.as_deref().unwrap_or("unknown");
+    let error_message = data.error.as_deref().unwrap_or("missing error");
+
+    format!(
+        "**Recording engine error**\nid: `{}`\nts: `{}`\ntype: `{}`\nplatform: `{}`\nchannel: `{}`\nerror: {}",
+        payload.id,
+        payload.ts.to_rfc3339(),
+        payload.type_,
+        platform,
+        channel,
+        error_message
+    )
 }

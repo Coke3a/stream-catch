@@ -348,7 +348,7 @@ impl RecordingEngineWebhookUseCase {
         let channel = data.channel.as_deref().unwrap_or("unknown");
         let error_message = data.error.as_deref().unwrap_or("missing error");
 
-        error!(
+        warn!(
             payload_id = %payload.id,
             payload_ts = %payload.ts,
             payload_type = %payload.type_,
