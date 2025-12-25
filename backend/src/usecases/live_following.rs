@@ -135,12 +135,22 @@ where
                         debug!("live_following: no reusable follow found, creating new follow");
                     }
                     Err(err) => {
-                        error!(
-                            %user_id,
-                            live_account_id = %live_account.id,
-                            db_error = ?err,
-                            "live_following: failed to load follow state, creating new follow"
-                        );
+                        if err.downcast_ref::<diesel::result::Error>()
+                            == Some(&diesel::result::Error::NotFound)
+                        {
+                            info!(
+                                %user_id,
+                                live_account_id = %live_account.id,
+                                "live_following: follow not found, creating new follow"
+                            );
+                        } else {
+                            error!(
+                                %user_id,
+                                live_account_id = %live_account.id,
+                                db_error = ?err,
+                                "live_following: failed to load follow state, creating new follow"
+                            );
+                        }
                     }
                 }
 
