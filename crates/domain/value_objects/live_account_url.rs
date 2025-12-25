@@ -66,7 +66,7 @@ fn detect_platform(host: &str) -> Option<Platform> {
         "www.twitch.tv" | "twitch.tv" => Some(Platform::Twitch),
         "www.bigo.tv" | "bigo.tv" => Some(Platform::Bigo),
         "kick.com" | "www.kick.com" => Some(Platform::Kick),
-        "www.sooplive.com" | "sooplive.com" => Some(Platform::SoopLive),
+        "play.sooplive.co.kr" => Some(Platform::SoopLive),
         _ => None,
     }
 }
@@ -78,7 +78,7 @@ fn normalize_url_for_platform(platform: Platform, url: &Url) -> Result<(String, 
         Platform::Bigo => normalize_single_segment(url, "www.bigo.tv", UsernameRule::TikTok),
         Platform::Kick => normalize_single_segment(url, "kick.com", UsernameRule::Strict),
         Platform::SoopLive => {
-            normalize_single_segment(url, "www.sooplive.com", UsernameRule::Strict)
+            normalize_single_segment_exact_path(url, "play.sooplive.co.kr", UsernameRule::Strict)
         }
     }
 }
@@ -106,6 +106,29 @@ fn normalize_single_segment(
 
     let canonical_url = format!("https://{}/{}", canonical_host, path);
     Ok((path.to_string(), canonical_url))
+}
+
+fn normalize_single_segment_exact_path(
+    url: &Url,
+    canonical_host: &'static str,
+    rule: UsernameRule,
+) -> Result<(String, String)> {
+    let path = url.path();
+    if path == "/" {
+        bail!("Invalid URL: missing account id");
+    }
+    if path.ends_with('/') {
+        bail!("Invalid URL: expected a single path segment");
+    }
+    let account_id = path.strip_prefix('/').unwrap_or(path);
+    if account_id.is_empty() || account_id.contains('/') {
+        bail!("Invalid URL: expected a single path segment");
+    }
+
+    validate_account_id(account_id, rule)?;
+
+    let canonical_url = format!("https://{}/{}", canonical_host, account_id);
+    Ok((account_id.to_string(), canonical_url))
 }
 
 fn normalize_tiktok(url: &Url) -> Result<(String, String)> {
@@ -169,14 +192,20 @@ mod tests {
     }
 
     #[test]
-    fn valid_sooplive_url_is_normalized() {
-        let normalized = normalize_live_account_url("https://www.sooplive.com/kiss2514").unwrap();
-        assert_eq!(normalized.platform, Platform::SoopLive);
-        assert_eq!(normalized.account_id, "kiss2514");
-        assert_eq!(
-            normalized.canonical_url,
-            "https://www.sooplive.com/kiss2514"
-        );
+    fn valid_sooplive_kr_urls_are_normalized() {
+        for (raw, account_id) in [
+            ("https://play.sooplive.co.kr/kiss281004", "kiss281004"),
+            ("https://play.sooplive.co.kr/lovely5959", "lovely5959"),
+            ("https://play.sooplive.co.kr/he0901", "he0901"),
+        ] {
+            let normalized = normalize_live_account_url(raw).unwrap();
+            assert_eq!(normalized.platform, Platform::SoopLive);
+            assert_eq!(normalized.account_id, account_id);
+            assert_eq!(
+                normalized.canonical_url,
+                format!("https://play.sooplive.co.kr/{}", account_id)
+            );
+        }
     }
 
     #[test]
@@ -184,10 +213,11 @@ mod tests {
         let normalized = normalize_live_account_url("https://www.kick.com/nahyunworld").unwrap();
         assert_eq!(normalized.canonical_url, "https://kick.com/nahyunworld");
 
-        let normalized = normalize_live_account_url("https://sooplive.com/kiss2514").unwrap();
+        let normalized = normalize_live_account_url("https://PLAY.SOOPLIVE.CO.KR/kiss281004")
+            .unwrap();
         assert_eq!(
             normalized.canonical_url,
-            "https://www.sooplive.com/kiss2514"
+            "https://play.sooplive.co.kr/kiss281004"
         );
     }
 
@@ -228,12 +258,13 @@ mod tests {
         assert_eq!(normalized.account_id, "stream.er");
         assert_eq!(normalized.canonical_url, "https://kick.com/stream.er");
 
-        let normalized = normalize_live_account_url("https://www.sooplive.com/stream.er").unwrap();
+        let normalized =
+            normalize_live_account_url("https://play.sooplive.co.kr/stream.er").unwrap();
         assert_eq!(normalized.platform, Platform::SoopLive);
         assert_eq!(normalized.account_id, "stream.er");
         assert_eq!(
             normalized.canonical_url,
-            "https://www.sooplive.com/stream.er"
+            "https://play.sooplive.co.kr/stream.er"
         );
     }
 
@@ -255,7 +286,16 @@ mod tests {
 
     #[test]
     fn invalid_sooplive_urls_are_rejected() {
-        for raw in ["https://www.sooplive.com/", "https://www.sooplive.com/a/b"] {
+        for raw in [
+            "https://play.sooplive.co.kr",
+            "https://play.sooplive.co.kr/",
+            "https://play.sooplive.co.kr/he0901/",
+            "https://play.sooplive.co.kr/he0901d/asdasdsa",
+            "https://play.sooplive.co.kr/he0901https:",
+            "https://play.sooplive.co.kr//he0901",
+            "http://play.sooplive.co.kr/he0901",
+            "https://play.sooplive.co.kr/he0901?x=1",
+        ] {
             let err = normalize_live_account_url(raw).unwrap_err().to_string();
             assert!(
                 err.contains("Invalid URL"),
@@ -285,6 +325,11 @@ mod tests {
     #[test]
     fn host_must_match_exactly() {
         let err = normalize_live_account_url("https://kick.com.evil.com/nahyunworld")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Unsupported platform"), "got: {err}");
+
+        let err = normalize_live_account_url("https://www.sooplive.com/he0901")
             .unwrap_err()
             .to_string();
         assert!(err.contains("Unsupported platform"), "got: {err}");
