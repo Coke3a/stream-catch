@@ -85,6 +85,30 @@ impl RecordingHomeDto {
     }
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct HomeRecordingsCursor {
+    pub started_at: DateTime<Utc>,
+    pub id: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HomeRecordingsPageDto {
+    pub items: Vec<RecordingHomeDto>,
+    pub next_cursor: Option<HomeRecordingsCursor>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FollowsRecordingCountDto {
+    pub live_account_id: Uuid,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FollowsRecordingCountsDto {
+    pub items: Vec<FollowsRecordingCountDto>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HomeRecordingStatsDto {
     pub total_recordings: i64,
@@ -119,29 +143,88 @@ where
         }
     }
 
-    pub async fn list_home_recordings(&self, user_id: Uuid) -> Result<Vec<RecordingHomeDto>> {
+    pub async fn list_home_recordings(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        cursor: Option<HomeRecordingsCursor>,
+    ) -> Result<HomeRecordingsPageDto> {
         let retention_days = self.effective_retention_days(user_id).await?;
+        let fetch_limit = limit.saturating_add(1);
+        let (cursor_started_at, cursor_id) = match cursor {
+            Some(cursor) => (Some(cursor.started_at), Some(cursor.id)),
+            None => (None, None),
+        };
+
         let recordings = self
             .recording_view_repo
-            .list_home_entitled_recordings(user_id, retention_days)
+            .list_home_entitled_recordings(
+                user_id,
+                retention_days,
+                fetch_limit,
+                cursor_started_at,
+                cursor_id,
+            )
             .await?;
 
-        Ok(recordings
+        let has_more = recordings.len() > limit as usize;
+        let items: Vec<RecordingHomeDto> = recordings
             .into_iter()
+            .take(limit as usize)
             .map(|(recording, live_account)| {
                 RecordingHomeDto::from_entities(recording, live_account)
             })
-            .collect())
+            .collect();
+
+        let next_cursor = if has_more {
+            items.last().map(|item| HomeRecordingsCursor {
+                started_at: item.recording.started_at.clone(),
+                id: item.recording.id,
+            })
+        } else {
+            None
+        };
+
+        Ok(HomeRecordingsPageDto {
+            items,
+            next_cursor,
+            has_more,
+        })
     }
 
-    pub async fn list_follows_recordings(&self, user_id: Uuid) -> Result<Vec<RecordingDto>> {
+    pub async fn list_follows_recordings(
+        &self,
+        user_id: Uuid,
+        live_account_id: Option<Uuid>,
+    ) -> Result<Vec<RecordingDto>> {
         let retention_days = self.effective_retention_days(user_id).await?;
         let recordings = self
             .recording_view_repo
-            .list_follows_entitled_recordings(user_id, retention_days)
+            .list_follows_entitled_recordings(user_id, retention_days, live_account_id)
             .await?;
 
         Ok(recordings.into_iter().map(RecordingDto::from).collect())
+    }
+
+    pub async fn list_follows_recording_counts(
+        &self,
+        user_id: Uuid,
+    ) -> Result<FollowsRecordingCountsDto> {
+        let retention_days = self.effective_retention_days(user_id).await?;
+        let counts = self
+            .recording_view_repo
+            .count_follows_entitled_recordings(user_id, retention_days)
+            .await?;
+
+        let items = counts
+            .into_iter()
+            .map(|(live_account_id, count)| FollowsRecordingCountDto {
+                live_account_id,
+                count,
+            })
+            .collect();
+
+        Ok(FollowsRecordingCountsDto { items })
     }
 
     pub async fn home_stats(&self, user_id: Uuid) -> Result<HomeRecordingStatsDto> {

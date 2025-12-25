@@ -290,6 +290,14 @@ CREATE INDEX "payments_invoice_idx"
 CREATE UNIQUE INDEX "live_accounts_platform_account_uidx"
   ON "live_accounts" ("platform", "account_id");
 
+-- Recordings list pagination
+CREATE INDEX "recordings_status_started_at_id_idx"
+  ON "recordings" ("status", "started_at" DESC, "id" DESC);
+
+-- Follows entitlement lookups
+CREATE INDEX "follows_user_status_live_account_idx"
+  ON "follows" ("user_id", "status", "live_account_id");
+
 -- Deliveries: one row per recording/user/channel
 CREATE UNIQUE INDEX "deliveries_recording_user_via_uidx"
   ON "deliveries" ("recording_id", "user_id", "via");

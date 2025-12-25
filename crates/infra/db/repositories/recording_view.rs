@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use diesel::{RunQueryDsl, dsl::count_star, prelude::*};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -42,12 +43,15 @@ impl RecordingViewRepository for RecordingViewPostgres {
         &self,
         user_id: Uuid,
         retention_days: i64,
+        limit: i64,
+        cursor_started_at: Option<DateTime<Utc>>,
+        cursor_id: Option<Uuid>,
     ) -> Result<Vec<(RecordingEntity, LiveAccountEntity)>> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
         let view_filter_sql = Self::view_window_filter_sql(retention_days);
 
-        let results = recordings::table
+        let mut query = recordings::table
             .inner_join(live_accounts::table.on(recordings::live_account_id.eq(live_accounts::id)))
             .inner_join(follows::table.on(follows::live_account_id.eq(recordings::live_account_id)))
             .select((RecordingEntity::as_select(), LiveAccountEntity::as_select()))
@@ -57,7 +61,21 @@ impl RecordingViewRepository for RecordingViewPostgres {
             .filter(diesel::dsl::sql::<diesel::sql_types::Bool>(
                 &view_filter_sql,
             ))
-            .order(recordings::started_at.desc())
+            .into_boxed();
+
+        if let (Some(cursor_started_at), Some(cursor_id)) = (cursor_started_at, cursor_id) {
+            query = query.filter(
+                recordings::started_at
+                    .lt(cursor_started_at)
+                    .or(recordings::started_at
+                        .eq(cursor_started_at)
+                        .and(recordings::id.lt(cursor_id))),
+            );
+        }
+
+        let results = query
+            .order((recordings::started_at.desc(), recordings::id.desc()))
+            .limit(limit)
             .load::<(RecordingEntity, LiveAccountEntity)>(&mut conn)?;
 
         Ok(results)
@@ -67,12 +85,13 @@ impl RecordingViewRepository for RecordingViewPostgres {
         &self,
         user_id: Uuid,
         retention_days: i64,
+        live_account_id: Option<Uuid>,
     ) -> Result<Vec<RecordingEntity>> {
         let mut conn = Arc::clone(&self.db_pool).get()?;
 
         let view_filter_sql = Self::view_window_filter_sql(retention_days);
 
-        let results = recordings::table
+        let mut query = recordings::table
             .inner_join(follows::table.on(follows::live_account_id.eq(recordings::live_account_id)))
             .select(RecordingEntity::as_select())
             .filter(follows::user_id.eq(user_id))
@@ -81,8 +100,39 @@ impl RecordingViewRepository for RecordingViewPostgres {
             .filter(diesel::dsl::sql::<diesel::sql_types::Bool>(
                 &view_filter_sql,
             ))
-            .order(recordings::started_at.desc())
+            .into_boxed();
+
+        if let Some(live_account_id) = live_account_id {
+            query = query.filter(recordings::live_account_id.eq(live_account_id));
+        }
+
+        let results = query
+            .order((recordings::started_at.desc(), recordings::id.desc()))
             .load::<RecordingEntity>(&mut conn)?;
+
+        Ok(results)
+    }
+
+    async fn count_follows_entitled_recordings(
+        &self,
+        user_id: Uuid,
+        retention_days: i64,
+    ) -> Result<Vec<(Uuid, i64)>> {
+        let mut conn = Arc::clone(&self.db_pool).get()?;
+
+        let view_filter_sql = Self::view_window_filter_sql(retention_days);
+
+        let results = recordings::table
+            .inner_join(follows::table.on(follows::live_account_id.eq(recordings::live_account_id)))
+            .filter(follows::user_id.eq(user_id))
+            .filter(follows::status.eq(FollowStatus::Active.to_string()))
+            .filter(recordings::status.eq(RecordingStatus::Ready.to_string()))
+            .filter(diesel::dsl::sql::<diesel::sql_types::Bool>(
+                &view_filter_sql,
+            ))
+            .group_by(recordings::live_account_id)
+            .select((recordings::live_account_id, count_star()))
+            .load::<(Uuid, i64)>(&mut conn)?;
 
         Ok(results)
     }
