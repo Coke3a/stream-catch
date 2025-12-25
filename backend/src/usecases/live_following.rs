@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use chrono::{DateTime, Duration, Utc};
 use crates::domain;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -14,6 +15,78 @@ use domain::{
     },
 };
 use tracing::{debug, error, info, warn};
+
+const FOLLOW_REACTIVATION_COOLDOWN_HOURS: i64 = 72;
+
+#[derive(Debug, Clone)]
+pub struct FollowCooldownError {
+    cooldown_until: DateTime<Utc>,
+    remaining: Duration,
+}
+
+impl FollowCooldownError {
+    pub fn new(unfollowed_at: DateTime<Utc>, now: DateTime<Utc>) -> Option<Self> {
+        let cooldown_until = unfollowed_at + Duration::hours(FOLLOW_REACTIVATION_COOLDOWN_HOURS);
+        if now < cooldown_until {
+            Some(Self {
+                cooldown_until,
+                remaining: cooldown_until - now,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn cooldown_until(&self) -> DateTime<Utc> {
+        self.cooldown_until
+    }
+
+    pub fn remaining_seconds(&self) -> i64 {
+        self.remaining.num_seconds().max(0)
+    }
+
+    pub fn remaining_hours(&self) -> i64 {
+        (self.remaining_seconds() + 3599) / 3600
+    }
+
+    pub fn message(&self) -> String {
+        let remaining_hours = self.remaining_hours();
+        let days = remaining_hours / 24;
+        let hours = remaining_hours % 24;
+        let time_label = if days > 0 && hours > 0 {
+            format!(
+                "{} {}",
+                Self::pluralize(days, "day"),
+                Self::pluralize(hours, "hour")
+            )
+        } else if days > 0 {
+            Self::pluralize(days, "day")
+        } else {
+            Self::pluralize(remaining_hours.max(1), "hour")
+        };
+
+        format!(
+            "You recently unfollowed this streamer. You can follow again in {}.",
+            time_label
+        )
+    }
+
+    fn pluralize(value: i64, unit: &str) -> String {
+        if value == 1 {
+            format!("1 {}", unit)
+        } else {
+            format!("{} {}s", value, unit)
+        }
+    }
+}
+
+impl std::fmt::Display for FollowCooldownError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+
+impl std::error::Error for FollowCooldownError {}
 
 pub struct LiveFollowingUseCase<L, P, S>
 where
@@ -75,9 +148,7 @@ where
 
         let active_status = FollowStatus::Active.to_string();
         let inactive_status = FollowStatus::Inactive.to_string();
-        let now = chrono::Utc::now();
-
-        self.ensure_follow_quota(user_id).await?;
+        let now = Utc::now();
 
         // Try to find existing live account first
         let live_account_result = self
@@ -114,6 +185,18 @@ where
 
                     // Inactive → reactivate and return
                     Ok(existing_follow) if existing_follow.status == inactive_status => {
+                        if let Some(cooldown) = FollowCooldownError::new(existing_follow.updated_at, now) {
+                            warn!(
+                                %user_id,
+                                live_account_id = %live_account.id,
+                                remaining_hours = cooldown.remaining_hours(),
+                                "live_following: follow cooldown active"
+                            );
+                            return Err(anyhow!(cooldown));
+                        }
+
+                        self.ensure_follow_quota(user_id).await?;
+
                         info!("live_following: reactivating existing follow");
                         self.live_following_repository
                             .to_active(user_id, live_account.id)
@@ -154,6 +237,8 @@ where
                     }
                 }
 
+                self.ensure_follow_quota(user_id).await?;
+
                 // Create a new follow for existing live account
                 let insert_follow_entity = domain::entities::follows::InsertFollowEntity {
                     user_id,
@@ -189,6 +274,8 @@ where
                     db_error = ?err,
                     "live_following: creating new live account and follow"
                 );
+
+                self.ensure_follow_quota(user_id).await?;
 
                 let insert_live_account_entity =
                     domain::entities::live_accounts::InsertLiveAccountEntity {
@@ -279,5 +366,209 @@ where
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::usecases::plan_resolver::PlanResolver;
+    use crates::domain::{
+        entities::{
+            follows::FollowEntity, live_accounts::LiveAccountEntity, plans::PlanEntity,
+        },
+        repositories::{
+            live_following::MockLiveFollowingRepository, plans::MockPlanRepository,
+            subscriptions::MockSubscriptionRepository,
+        },
+        value_objects::{
+            enums::{
+                follow_statuses::FollowStatus, live_account_statuses::LiveAccountStatus,
+                platforms::Platform,
+            },
+            live_following::FindLiveAccountModel,
+            plans::{PlanFeatures, FREE_PLAN_ID},
+        },
+    };
+    use mockall::predicate::eq;
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    fn sample_plan(plan_id: Uuid, max_follows: i64) -> PlanEntity {
+        PlanEntity {
+            id: plan_id,
+            name: Some("Test Plan".to_string()),
+            price_minor: 0,
+            duration_days: 30,
+            features: PlanFeatures {
+                max_follows: Some(max_follows),
+                ..PlanFeatures::default()
+            },
+            is_active: true,
+            stripe_price_recurring: None,
+            stripe_price_one_time_card: None,
+            stripe_price_one_time_promptpay: None,
+        }
+    }
+
+    fn sample_live_account(id: Uuid, now: DateTime<Utc>) -> LiveAccountEntity {
+        LiveAccountEntity {
+            id,
+            platform: Platform::TikTok.to_string(),
+            account_id: "alice".to_string(),
+            canonical_url: "https://www.tiktok.com/@alice/live".to_string(),
+            status: LiveAccountStatus::Unsynced.to_string(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn sample_follow(
+        user_id: Uuid,
+        live_account_id: Uuid,
+        status: FollowStatus,
+        timestamp: DateTime<Utc>,
+    ) -> FollowEntity {
+        FollowEntity {
+            user_id,
+            live_account_id,
+            status: status.to_string(),
+            created_at: timestamp,
+            updated_at: timestamp,
+        }
+    }
+
+    fn plan_resolver_with_max_follows(
+        user_id: Uuid,
+        max_follows: i64,
+    ) -> PlanResolver<MockPlanRepository, MockSubscriptionRepository> {
+        let mut plan_repo = MockPlanRepository::new();
+        let mut subscription_repo = MockSubscriptionRepository::new();
+
+        subscription_repo
+            .expect_find_current_active_non_free_subscription()
+            .with(eq(user_id), eq(FREE_PLAN_ID))
+            .returning(|_, _| Box::pin(async { Ok(None) }));
+
+        let plan = sample_plan(FREE_PLAN_ID, max_follows);
+        plan_repo
+            .expect_find_by_id()
+            .with(eq(FREE_PLAN_ID))
+            .returning(move |_| {
+                let plan = plan.clone();
+                Box::pin(async move { Ok(plan) })
+            });
+
+        PlanResolver::new(
+            Arc::new(plan_repo),
+            Arc::new(subscription_repo),
+            FREE_PLAN_ID,
+        )
+    }
+
+    #[tokio::test]
+    async fn blocks_reactivation_when_unfollowed_within_cooldown() {
+        let user_id = Uuid::new_v4();
+        let live_account_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let live_account = sample_live_account(live_account_id, now);
+        let follow = sample_follow(
+            user_id,
+            live_account_id,
+            FollowStatus::Inactive,
+            now - Duration::hours(1),
+        );
+
+        let expected_model = FindLiveAccountModel {
+            platform: Platform::TikTok,
+            account_id: "alice".to_string(),
+        };
+
+        let mut live_following_repo = MockLiveFollowingRepository::new();
+        live_following_repo
+            .expect_find_live_account()
+            .with(eq(expected_model))
+            .returning(move |_| {
+                let live_account = live_account.clone();
+                Box::pin(async move { Ok(live_account) })
+            });
+        live_following_repo
+            .expect_find_follow()
+            .with(eq(user_id), eq(live_account_id))
+            .returning(move |_, _| {
+                let follow = follow.clone();
+                Box::pin(async move { Ok(follow) })
+            });
+
+        let plan_resolver = PlanResolver::new(
+            Arc::new(MockPlanRepository::new()),
+            Arc::new(MockSubscriptionRepository::new()),
+            FREE_PLAN_ID,
+        );
+
+        let usecase =
+            LiveFollowingUseCase::new(Arc::new(live_following_repo), Arc::new(plan_resolver));
+
+        let err = usecase
+            .follow(user_id, "https://www.tiktok.com/@alice/live".to_string())
+            .await
+            .unwrap_err();
+
+        assert!(err.downcast_ref::<FollowCooldownError>().is_some());
+    }
+
+    #[tokio::test]
+    async fn reactivates_when_cooldown_elapsed() {
+        let user_id = Uuid::new_v4();
+        let live_account_id = Uuid::new_v4();
+        let now = Utc::now();
+
+        let live_account = sample_live_account(live_account_id, now);
+        let follow = sample_follow(
+            user_id,
+            live_account_id,
+            FollowStatus::Inactive,
+            now - Duration::hours(73),
+        );
+
+        let expected_model = FindLiveAccountModel {
+            platform: Platform::TikTok,
+            account_id: "alice".to_string(),
+        };
+
+        let mut live_following_repo = MockLiveFollowingRepository::new();
+        live_following_repo
+            .expect_find_live_account()
+            .with(eq(expected_model))
+            .returning(move |_| {
+                let live_account = live_account.clone();
+                Box::pin(async move { Ok(live_account) })
+            });
+        live_following_repo
+            .expect_find_follow()
+            .with(eq(user_id), eq(live_account_id))
+            .returning(move |_, _| {
+                let follow = follow.clone();
+                Box::pin(async move { Ok(follow) })
+            });
+        live_following_repo
+            .expect_count_active_follows()
+            .with(eq(user_id))
+            .returning(|_| Box::pin(async { Ok(0) }));
+        live_following_repo
+            .expect_to_active()
+            .with(eq(user_id), eq(live_account_id))
+            .returning(|_, _| Box::pin(async { Ok(()) }));
+
+        let plan_resolver = plan_resolver_with_max_follows(user_id, 5);
+        let usecase =
+            LiveFollowingUseCase::new(Arc::new(live_following_repo), Arc::new(plan_resolver));
+
+        let result = usecase
+            .follow(user_id, "https://www.tiktok.com/@alice/live".to_string())
+            .await;
+
+        assert!(result.is_ok());
     }
 }

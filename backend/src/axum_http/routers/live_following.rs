@@ -1,6 +1,10 @@
-use crate::usecases::{live_following::LiveFollowingUseCase, plan_resolver::PlanResolver};
+use crate::usecases::{
+    live_following::{FollowCooldownError, LiveFollowingUseCase},
+    plan_resolver::PlanResolver,
+};
 use crate::{axum_http::auth::AuthUser, config::config_model::DotEnvyConfig};
 use axum::{
+    Json,
     Router,
     extract::{Path, State},
     http::StatusCode,
@@ -21,7 +25,17 @@ use crates::{
     },
 };
 use std::sync::Arc;
+use serde::Serialize;
 use tracing::info;
+
+#[derive(Debug, Serialize)]
+struct FollowCooldownPayload {
+    error: &'static str,
+    message: String,
+    cooldown_until: String,
+    remaining_hours: i64,
+    remaining_seconds: i64,
+}
 
 pub fn routes(db_pool: Arc<PgPoolSquad>, config: Arc<DotEnvyConfig>) -> Router {
     let live_following_repository = LiveFollowingPostgres::new(Arc::clone(&db_pool));
@@ -98,6 +112,24 @@ where
             (StatusCode::OK, "Followed successfully").into_response()
         }
         Err(e) => {
+            if let Some(cooldown) = e.downcast_ref::<FollowCooldownError>() {
+                let payload = FollowCooldownPayload {
+                    error: "follow_cooldown",
+                    message: cooldown.message(),
+                    cooldown_until: cooldown.cooldown_until().to_rfc3339(),
+                    remaining_hours: cooldown.remaining_hours(),
+                    remaining_seconds: cooldown.remaining_seconds(),
+                };
+                let status = StatusCode::TOO_MANY_REQUESTS;
+                info!(
+                    %auth.user_id,
+                    status = status.as_u16(),
+                    error = %payload.message,
+                    "live_following: follow cooldown active"
+                );
+                return (status, Json(payload)).into_response();
+            }
+
             let error_message = e.to_string();
             if error_message.contains("Follow already exists") {
                 let status = StatusCode::CONFLICT;
