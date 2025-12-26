@@ -72,7 +72,7 @@ async fn add_account(driver: &WebDriver, insert_urls: String) -> Result<()> {
     name_input.send_keys(insert_urls).await?;
     let add_confirm_button = driver.find(By::Css("button.MuiButtonBase-root.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeMedium.MuiButton-containedSizeMedium.MuiButton-colorPrimary.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeMedium.MuiButton-containedSizeMedium.MuiButton-colorPrimary.css-5y2zdi")).await?;
     add_confirm_button.click().await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     Ok(())
 }
 
