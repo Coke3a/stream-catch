@@ -14,8 +14,11 @@ pub async fn add_account_recording_engine(
     account_entities: Vec<LiveAccountEntity>,
 ) -> Result<(Vec<LiveAccountEntity>, Option<Vec<LiveAccountEntity>>)> {
     let driver = initialize_driver().await?;
+    info!("Initialized driver");
     access_url(&driver).await?;
+    info!("Accessed URL");
     add_account(&driver, insert_urls).await?;
+    info!("Added account");
     let mut added_accounts = Vec::new();
     let mut failed_accounts = Vec::new();
     for account in account_entities {
