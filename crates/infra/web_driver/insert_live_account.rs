@@ -1,13 +1,15 @@
 use crate::domain::entities::live_accounts::LiveAccountEntity;
 use anyhow::Result;
 use serde_json::json;
-use thirtyfour::error::WebDriverResult;
+use thirtyfour::error::{WebDriverError, WebDriverResult};
 use thirtyfour::extensions::cdp::ChromeDevTools;
-use thirtyfour::prelude::ElementWaitable;
 use thirtyfour::prelude::Key;
-use thirtyfour::{By, DesiredCapabilities, WebDriver};
+use thirtyfour::{By, DesiredCapabilities, WebDriver, WebElement};
 use tracing::info;
 use url::Url;
+
+const WAIT_ELEMENT_TIMEOUT: u64 = 10;
+const WAIT_ELEMENT_POLL: u64 = 1;
 
 pub async fn add_account_recording_engine(
     insert_urls: String,
@@ -59,18 +61,25 @@ async fn access_url(driver: &WebDriver) -> Result<()> {
 }
 
 async fn add_account(driver: &WebDriver, insert_urls: String) -> Result<()> {
-    let add_button = driver.find(By::Css("button.MuiButtonBase-root.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeSmall.MuiButton-containedSizeSmall.MuiButton-colorPrimary.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeSmall.MuiButton-containedSizeSmall.MuiButton-colorPrimary.css-1l10thz")).await?;
+    let add_button = wait_find_clickable_simple(
+        driver,
+        By::Css("button.MuiButtonBase-root.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeSmall.MuiButton-containedSizeSmall.MuiButton-colorPrimary.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeSmall.MuiButton-containedSizeSmall.MuiButton-colorPrimary.css-1l10thz"),
+    ).await?;
     add_button.click().await?;
-    let input_tag = driver
-        .find(By::Css(
-            "div.MuiDialogContent-root.css-1nbx5hx > div > div > div",
-        ))
-        .await?;
-    input_tag.wait_until().clickable().await?;
+    let input_tag = wait_find_clickable_simple(
+        driver,
+        By::Css("div.MuiDialogContent-root.css-1nbx5hx > div > div > div"),
+    ).await?;
     input_tag.click().await?;
-    let name_input = driver.find(By::Css("textarea#url")).await?;
+    let name_input = wait_find_clickable_simple(
+        driver,
+        By::Css("textarea#url"),
+    ).await?;
     name_input.send_keys(insert_urls).await?;
-    let add_confirm_button = driver.find(By::Css("button.MuiButtonBase-root.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeMedium.MuiButton-containedSizeMedium.MuiButton-colorPrimary.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeMedium.MuiButton-containedSizeMedium.MuiButton-colorPrimary.css-5y2zdi")).await?;
+    let add_confirm_button = wait_find_clickable_simple(
+        driver,
+        By::Css("button.MuiButtonBase-root.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeMedium.MuiButton-containedSizeMedium.MuiButton-colorPrimary.MuiButton-root.MuiButton-contained.MuiButton-containedPrimary.MuiButton-sizeMedium.MuiButton-containedSizeMedium.MuiButton-colorPrimary.css-5y2zdi"),
+    ).await?;
     add_confirm_button.click().await?;
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     Ok(())
@@ -81,11 +90,12 @@ async fn check_account_is_added(
     username: &str,
     platform: &str,
 ) -> WebDriverResult<bool> {
-    let search_element = driver
-        .find(By::Css(
+    let search_element = wait_find_clickable_simple(
+        driver,
+        By::Css(
             "div.MuiBox-root.css-67s2z9 > div > div > div > div > input",
-        ))
-        .await?;
+        ),
+    ).await?;
     search_element.send_keys(Key::Control + "a").await?;
     search_element.send_keys(Key::Backspace).await?;
     search_element.send_keys(username).await?;
@@ -108,3 +118,25 @@ async fn check_account_is_added(
 //     println!("Saved {}", file_name);
 //     Ok(())
 // }
+
+async fn wait_find_clickable_simple(
+    driver: &WebDriver,
+    by: By,
+) -> WebDriverResult<WebElement> {
+    let start = tokio::time::Instant::now();
+    loop {
+        let elements = driver.find_all(by.clone()).await?;
+        for element in elements {
+            if element.is_displayed().await? && element.is_enabled().await? {
+                return Ok(element);
+            }
+        }
+        if start.elapsed() >= tokio::time::Duration::from_secs(WAIT_ELEMENT_TIMEOUT) {
+            return Err(WebDriverError::Timeout(format!(
+                "Timed out after {:?} waiting for clickable element: {:?}",
+                WAIT_ELEMENT_TIMEOUT, by
+            )));
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(WAIT_ELEMENT_POLL)).await;
+    }
+}
